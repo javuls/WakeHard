@@ -1,0 +1,405 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		001000000000000000000001 /* WakeHardApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000001 /* WakeHardApp.swift */; };
+		001000000000000000000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000002 /* AppDelegate.swift */; };
+		001000000000000000000003 /* Alarm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000003 /* Alarm.swift */; };
+		001000000000000000000004 /* AlarmStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000004 /* AlarmStore.swift */; };
+		001000000000000000000005 /* NotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000005 /* NotificationScheduler.swift */; };
+		001000000000000000000006 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000006 /* SoundManager.swift */; };
+		001000000000000000000007 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000007 /* AppTheme.swift */; };
+		001000000000000000000008 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000008 /* ContentView.swift */; };
+		001000000000000000000009 /* AlarmEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000009 /* AlarmEditorView.swift */; };
+		00100000000000000000000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000000A /* Assets.xcassets */; };
+		00100000000000000000000B /* pulse.wav in Resources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000000B /* pulse.wav */; };
+		00100000000000000000000C /* bell.wav in Resources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000000C /* bell.wav */; };
+		00100000000000000000000D /* rise.wav in Resources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000000D /* rise.wav */; };
+		00100000000000000000000E /* BackgroundAlarmEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000000F /* BackgroundAlarmEngine.swift */; };
+		00100000000000000000000F /* silence.wav in Resources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000010 /* silence.wav */; };
+		001000000000000000000010 /* MusicPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000011 /* MusicPickerView.swift */; };
+		001000000000000000000011 /* keepalive.wav in Resources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000013 /* keepalive.wav */; };
+		001000000000000000000012 /* VibrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000014 /* VibrationManager.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		002000000000000000000001 /* WakeHardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeHardApp.swift; sourceTree = "<group>"; };
+		002000000000000000000002 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		002000000000000000000003 /* Alarm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Alarm.swift; sourceTree = "<group>"; };
+		002000000000000000000004 /* AlarmStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmStore.swift; sourceTree = "<group>"; };
+		002000000000000000000005 /* NotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduler.swift; sourceTree = "<group>"; };
+		002000000000000000000006 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
+		002000000000000000000007 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		002000000000000000000008 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		002000000000000000000009 /* AlarmEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmEditorView.swift; sourceTree = "<group>"; };
+		00200000000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		00200000000000000000000B /* pulse.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = pulse.wav; sourceTree = "<group>"; };
+		00200000000000000000000C /* bell.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = bell.wav; sourceTree = "<group>"; };
+		00200000000000000000000D /* rise.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = rise.wav; sourceTree = "<group>"; };
+		00200000000000000000000E /* WakeHard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WakeHard.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		00200000000000000000000F /* BackgroundAlarmEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundAlarmEngine.swift; sourceTree = "<group>"; };
+		002000000000000000000010 /* silence.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = silence.wav; sourceTree = "<group>"; };
+		002000000000000000000011 /* MusicPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicPickerView.swift; sourceTree = "<group>"; };
+		002000000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		002000000000000000000013 /* keepalive.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = keepalive.wav; sourceTree = "<group>"; };
+		002000000000000000000014 /* VibrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VibrationManager.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		003000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		004000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				004000000000000000000002 /* WakeHard */,
+				004000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		004000000000000000000002 /* WakeHard */ = {
+			isa = PBXGroup;
+			children = (
+				002000000000000000000001 /* WakeHardApp.swift */,
+				002000000000000000000012 /* Info.plist */,
+				002000000000000000000002 /* AppDelegate.swift */,
+				002000000000000000000003 /* Alarm.swift */,
+				002000000000000000000004 /* AlarmStore.swift */,
+				002000000000000000000005 /* NotificationScheduler.swift */,
+				00200000000000000000000F /* BackgroundAlarmEngine.swift */,
+				002000000000000000000006 /* SoundManager.swift */,
+				002000000000000000000014 /* VibrationManager.swift */,
+				002000000000000000000007 /* AppTheme.swift */,
+				002000000000000000000008 /* ContentView.swift */,
+				002000000000000000000009 /* AlarmEditorView.swift */,
+				002000000000000000000011 /* MusicPickerView.swift */,
+				00200000000000000000000A /* Assets.xcassets */,
+				004000000000000000000003 /* Sounds */,
+			);
+			path = WakeHard;
+			sourceTree = "<group>";
+		};
+		004000000000000000000003 /* Sounds */ = {
+			isa = PBXGroup;
+			children = (
+				00200000000000000000000B /* pulse.wav */,
+				00200000000000000000000C /* bell.wav */,
+				00200000000000000000000D /* rise.wav */,
+				002000000000000000000010 /* silence.wav */,
+				002000000000000000000013 /* keepalive.wav */,
+			);
+			path = Sounds;
+			sourceTree = "<group>";
+		};
+		004000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				00200000000000000000000E /* WakeHard.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		005000000000000000000001 /* WakeHard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 009000000000000000000002 /* Build configuration list for PBXNativeTarget "WakeHard" */;
+			buildPhases = (
+				006000000000000000000001 /* Sources */,
+				003000000000000000000001 /* Frameworks */,
+				007000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WakeHard;
+			productName = WakeHard;
+			productReference = 00200000000000000000000E /* WakeHard.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		008000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					005000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 009000000000000000000001 /* Build configuration list for PBXProject "WakeHard" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 004000000000000000000001;
+			productRefGroup = 004000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				005000000000000000000001 /* WakeHard */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		007000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00100000000000000000000A /* Assets.xcassets in Resources */,
+				00100000000000000000000B /* pulse.wav in Resources */,
+				00100000000000000000000C /* bell.wav in Resources */,
+				00100000000000000000000D /* rise.wav in Resources */,
+				00100000000000000000000F /* silence.wav in Resources */,
+				001000000000000000000011 /* keepalive.wav in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		006000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001000000000000000000001 /* WakeHardApp.swift in Sources */,
+				001000000000000000000002 /* AppDelegate.swift in Sources */,
+				001000000000000000000003 /* Alarm.swift in Sources */,
+				001000000000000000000004 /* AlarmStore.swift in Sources */,
+				001000000000000000000005 /* NotificationScheduler.swift in Sources */,
+				00100000000000000000000E /* BackgroundAlarmEngine.swift in Sources */,
+				001000000000000000000006 /* SoundManager.swift in Sources */,
+				001000000000000000000012 /* VibrationManager.swift in Sources */,
+				001000000000000000000007 /* AppTheme.swift in Sources */,
+				001000000000000000000008 /* ContentView.swift in Sources */,
+				001000000000000000000009 /* AlarmEditorView.swift in Sources */,
+				001000000000000000000010 /* MusicPickerView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		00A000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = WVT7SB2RRK;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		00A000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = WVT7SB2RRK;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		00A000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WakeHard/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.javierrivera.wakehard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		00A000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WakeHard/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.javierrivera.wakehard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		009000000000000000000001 /* Build configuration list for PBXProject "WakeHard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00A000000000000000000001 /* Debug */,
+				00A000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		009000000000000000000002 /* Build configuration list for PBXNativeTarget "WakeHard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00A000000000000000000003 /* Debug */,
+				00A000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 008000000000000000000001 /* Project object */;
+}
