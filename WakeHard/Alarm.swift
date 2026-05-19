@@ -20,6 +20,9 @@ struct Alarm: Identifiable, Codable, Equatable {
     var gentleWakeDuration: GentleWakeDuration
     var isEnabled: Bool
     var challenge: WakeChallenge
+    var snoozeEnabled: Bool
+    var snoozeInterval: SnoozeInterval
+    var snoozeCount: SnoozeCount
 
     init(
         id: UUID = UUID(),
@@ -40,7 +43,10 @@ struct Alarm: Identifiable, Codable, Equatable {
         vibrationStrength: Double = 0.85,
         gentleWakeDuration: GentleWakeDuration = .off,
         isEnabled: Bool = true,
-        challenge: WakeChallenge = .none
+        challenge: WakeChallenge = .none,
+        snoozeEnabled: Bool = false,
+        snoozeInterval: SnoozeInterval = .minutes5,
+        snoozeCount: SnoozeCount = .times(3)
     ) {
         self.id = id
         self.label = label
@@ -61,6 +67,9 @@ struct Alarm: Identifiable, Codable, Equatable {
         self.gentleWakeDuration = gentleWakeDuration
         self.isEnabled = isEnabled
         self.challenge = challenge
+        self.snoozeEnabled = snoozeEnabled
+        self.snoozeInterval = snoozeInterval
+        self.snoozeCount = snoozeCount
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -83,6 +92,9 @@ struct Alarm: Identifiable, Codable, Equatable {
         case gentleWakeDuration
         case isEnabled
         case challenge
+        case snoozeEnabled
+        case snoozeInterval
+        case snoozeCount
     }
 
     init(from decoder: Decoder) throws {
@@ -106,6 +118,9 @@ struct Alarm: Identifiable, Codable, Equatable {
         gentleWakeDuration = try container.decodeIfPresent(GentleWakeDuration.self, forKey: .gentleWakeDuration) ?? .off
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
         challenge = try container.decode(WakeChallenge.self, forKey: .challenge)
+        snoozeEnabled = try container.decodeIfPresent(Bool.self, forKey: .snoozeEnabled) ?? false
+        snoozeInterval = try container.decodeIfPresent(SnoozeInterval.self, forKey: .snoozeInterval) ?? .minutes5
+        snoozeCount = try container.decodeIfPresent(SnoozeCount.self, forKey: .snoozeCount) ?? .times(3)
     }
 
     var dateComponents: DateComponents {
@@ -309,6 +324,80 @@ enum VibrationPattern: String, Codable, CaseIterable, Identifiable {
             return [0.12, 0.12, 0.12, 0.82]
         case .symphony:
             return [0.22, 0.44, 0.22, 0.68]
+        }
+    }
+}
+
+enum SnoozeInterval: Int, Codable, CaseIterable, Identifiable {
+    case minute1 = 60
+    case minutes3 = 180
+    case minutes5 = 300
+    case minutes10 = 600
+    case minutes15 = 900
+    case minutes30 = 1800
+    case minutes60 = 3600
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .minute1: return "1 minute"
+        case .minutes3: return "3 minutes"
+        case .minutes5: return "5 minutes"
+        case .minutes10: return "10 minutes"
+        case .minutes15: return "15 minutes"
+        case .minutes30: return "30 minutes"
+        case .minutes60: return "60 minutes"
+        }
+    }
+
+    var duration: TimeInterval {
+        TimeInterval(rawValue)
+    }
+}
+
+enum SnoozeCount: Codable, Equatable, Identifiable {
+    case times(Int)
+    case unlimited
+
+    var id: String {
+        switch self {
+        case .times(let count): return "times\(count)"
+        case .unlimited: return "unlimited"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .times(let count): return "\(count) time\(count == 1 ? "" : "s")"
+        case .unlimited: return "Unlimited"
+        }
+    }
+
+    var maxCount: Int? {
+        switch self {
+        case .times(let count): return count
+        case .unlimited: return nil
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(Int.self)
+        if value == -1 {
+            self = .unlimited
+        } else {
+            self = .times(value)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .times(let count):
+            try container.encode(count)
+        case .unlimited:
+            try container.encode(-1)
         }
     }
 }

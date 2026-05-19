@@ -7,11 +7,10 @@ final class NotificationScheduler {
     private init() {}
 
     func configure() {
-        let dismiss = UNNotificationAction(identifier: "DISMISS", title: "Dismiss", options: [])
-        let open = UNNotificationAction(identifier: "OPEN_APP", title: "Open", options: [.foreground])
+        let open = UNNotificationAction(identifier: "OPEN_APP", title: "Open WakeHard", options: [.foreground])
         let category = UNNotificationCategory(
             identifier: "ALARM",
-            actions: [open, dismiss],
+            actions: [open],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
@@ -23,7 +22,8 @@ final class NotificationScheduler {
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .notDetermined else { return }
         do {
-            _ = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+            // Request critical alert permission for alarms to ensure screen wakes
+            _ = try await center.requestAuthorization(options: [.alert, .badge, .sound, .criticalAlert])
         } catch {
             print("Notification authorization failed: \(error)")
         }
@@ -36,6 +36,7 @@ final class NotificationScheduler {
         for alarm in alarms where alarm.isEnabled {
             schedule(alarm: alarm)
         }
+        restorePendingSnoozeIfNeeded(alarms: alarms)
     }
 
     private func schedule(alarm: Alarm) {
@@ -63,11 +64,20 @@ final class NotificationScheduler {
 
     private func addRequest(alarm: Alarm, components: DateComponents, repeats: Bool, suffix: String) {
         let content = UNMutableNotificationContent()
-        content.title = alarm.label.isEmpty ? "WakeHard" : alarm.label
-        content.body = "Alarm for \(alarm.formattedTime)"
+        content.title = "Alarm ringing"
+        content.subtitle = alarm.label.isEmpty ? "WakeHard" : alarm.label
+        content.body = "Slide or tap to open WakeHard"
         content.categoryIdentifier = "ALARM"
         content.sound = UNNotificationSound(named: UNNotificationSoundName(alarm.sound.fileName))
-        content.userInfo = ["alarmID": alarm.id.uuidString]
+        content.userInfo = [
+            "alarmID": alarm.id.uuidString,
+            "alarmEvent": "alarm"
+        ]
+
+        // Mark as critical alert to ensure screen wakes (if permission granted)
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .critical
+        }
 
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: repeats)
         let request = UNNotificationRequest(
@@ -76,5 +86,106 @@ final class NotificationScheduler {
             trigger: trigger
         )
         UNUserNotificationCenter.current().add(request)
+    }
+
+    func scheduleSnooze(alarm: Alarm, fireDate: Date, remainingSnoozes: Int?, showStatusNotification: Bool = false) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: snoozeNotificationIdentifiers(for: alarm))
+
+        if showStatusNotification {
+            center.removeDeliveredNotifications(withIdentifiers: deliveredAlarmNotificationIdentifiers(for: alarm))
+            addSnoozeStatusNotification(alarm: alarm, fireDate: fireDate, remainingSnoozes: remainingSnoozes)
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Snooze is over"
+        content.subtitle = alarm.label.isEmpty ? "WakeHard" : alarm.label
+        content.body = "Snooze is over. Slide or tap to open WakeHard"
+        content.categoryIdentifier = "ALARM"
+        content.sound = UNNotificationSound(named: UNNotificationSoundName(alarm.sound.fileName))
+        content.userInfo = [
+            "alarmID": alarm.id.uuidString,
+            "alarmEvent": "snoozeRing"
+        ]
+
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+        }
+
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: max(1, fireDate.timeIntervalSinceNow),
+            repeats: false
+        )
+        let request = UNNotificationRequest(
+            identifier: "\(alarm.id.uuidString)-snooze",
+            content: content,
+            trigger: trigger
+        )
+        center.add(request)
+    }
+
+    func cancelSnooze(for alarm: Alarm) {
+        let center = UNUserNotificationCenter.current()
+        let identifiers = snoozeNotificationIdentifiers(for: alarm)
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    private func addSnoozeStatusNotification(alarm: Alarm, fireDate: Date, remainingSnoozes: Int?) {
+        let content = UNMutableNotificationContent()
+        content.title = "Snoozed"
+        content.body = snoozeStatusBody(fireDate: fireDate, remainingSnoozes: remainingSnoozes)
+        content.categoryIdentifier = "ALARM"
+        content.userInfo = [
+            "alarmID": alarm.id.uuidString,
+            "alarmEvent": "snoozeStatus"
+        ]
+
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .passive
+        }
+
+        let request = UNNotificationRequest(
+            identifier: "\(alarm.id.uuidString)-snooze-status",
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    private func snoozeStatusBody(fireDate: Date, remainingSnoozes: Int?) -> String {
+        let minutes = max(1, Int(ceil(fireDate.timeIntervalSinceNow / 60)))
+        let time = DateFormatter.localizedString(from: fireDate, dateStyle: .none, timeStyle: .short)
+        let snoozeText: String
+        if let remainingSnoozes {
+            snoozeText = "\(remainingSnoozes) snooze\(remainingSnoozes == 1 ? "" : "s") left"
+        } else {
+            snoozeText = "Unlimited snoozes left"
+        }
+        return "Rings at \(time) • \(minutes) min left • \(snoozeText)"
+    }
+
+    private func snoozeNotificationIdentifiers(for alarm: Alarm) -> [String] {
+        [
+            "\(alarm.id.uuidString)-snooze",
+            "\(alarm.id.uuidString)-snooze-status"
+        ]
+    }
+
+    private func deliveredAlarmNotificationIdentifiers(for alarm: Alarm) -> [String] {
+        var identifiers = ["\(alarm.id.uuidString)-once"]
+        identifiers.append(contentsOf: Weekday.allCases.map { "\(alarm.id.uuidString)-\($0.shortTitle)" })
+        identifiers.append(contentsOf: snoozeNotificationIdentifiers(for: alarm))
+        return identifiers
+    }
+
+    private func restorePendingSnoozeIfNeeded(alarms: [Alarm]) {
+        guard
+            let persisted = AlarmRuntimeStore.activeSnooze(),
+            persisted.fireDate > .now,
+            let alarm = alarms.first(where: { $0.id == persisted.alarmID })
+        else { return }
+
+        scheduleSnooze(alarm: alarm, fireDate: persisted.fireDate, remainingSnoozes: persisted.remainingSnoozes)
     }
 }

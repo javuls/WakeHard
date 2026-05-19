@@ -1,5 +1,6 @@
 import MediaPlayer
 import SwiftUI
+import UIKit
 
 struct AlarmEditorView: View {
     @Environment(\.dismiss) private var dismiss
@@ -10,6 +11,9 @@ struct AlarmEditorView: View {
     @State private var songNoteMessage = ""
     @State private var showingMusicPicker = false
     @State private var showingGentleWakePicker = false
+    @State private var showingSnoozePicker = false
+    @State private var showingDiscardConfirmation = false
+    private let originalAlarm: Alarm
 
     let onSave: (Alarm) -> Void
 
@@ -19,6 +23,7 @@ struct AlarmEditorView: View {
         components.hour = alarm.hour
         components.minute = alarm.minute
         _selectedDate = State(initialValue: Calendar.current.date(from: components) ?? .now)
+        originalAlarm = alarm
         self.onSave = onSave
     }
 
@@ -129,6 +134,14 @@ struct AlarmEditorView: View {
                                     .foregroundStyle(AppTheme.secondary)
                                 Slider(value: $alarm.volume, in: 0.1...1)
                                     .tint(AppTheme.accent)
+                                    .onChange(of: alarm.volume) { _ in
+                                        // Stop the preview as soon as the user
+                                        // moves the volume slider so they can
+                                        // reset and hear it at the new level.
+                                        if isPreviewActive {
+                                            soundManager.stop()
+                                        }
+                                    }
                                 Text("\(Int(alarm.volume * 100))")
                                     .font(.system(size: 13, weight: .semibold))
                                     .monospacedDigit()
@@ -159,9 +172,12 @@ struct AlarmEditorView: View {
                                         .font(.system(size: 12, weight: .bold))
                                         .foregroundStyle(AppTheme.muted)
                                 }
+                                // Stretch the label so the whole row, including
+                                // the Spacer gap, becomes the hit area.
+                                .frame(maxWidth: .infinity)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .contentShape(Rectangle())
                         }
 
                         EditorSection(title: "Vibration") {
@@ -209,6 +225,15 @@ struct AlarmEditorView: View {
                             .pickerStyle(.menu)
                         }
 
+                        EditorSection(title: "Snooze") {
+                            Button {
+                                showingSnoozePicker = true
+                            } label: {
+                                snoozeButtonLabel
+                            }
+                            .buttonStyle(.plain)
+                        }
+
                         EditorSection(title: "Label") {
                             TextField("Alarm", text: $alarm.label)
                                 .textInputAutocapitalization(.words)
@@ -226,17 +251,12 @@ struct AlarmEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        soundManager.stop()
-                        VibrationManager.shared.stop()
-                        dismiss()
+                        attemptDismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        let components = Calendar.current.dateComponents([.hour, .minute], from: selectedDate)
-                        alarm.hour = components.hour ?? alarm.hour
-                        alarm.minute = components.minute ?? alarm.minute
-                        onSave(alarm)
+                        onSave(currentDraft)
                         soundManager.stop()
                         VibrationManager.shared.stop()
                         dismiss()
@@ -258,13 +278,46 @@ struct AlarmEditorView: View {
                     .presentationDetents([.height(430)])
                     .presentationDragIndicator(.visible)
             }
+            .sheet(isPresented: $showingSnoozePicker) {
+                SnoozeEditorView(alarm: $alarm)
+            }
             .alert("Music access is needed", isPresented: $showingSongNote) {
                 Button("Got it", role: .cancel) {}
             } message: {
                 Text(songNoteMessage)
             }
+            .confirmationDialog(
+                "Discard unsaved changes?",
+                isPresented: $showingDiscardConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Discard", role: .destructive) {
+                    discardChanges()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your changes to this alarm will be lost.")
+            }
+            .interactiveDismissDisabled(hasUnsavedChanges)
+            .background(
+                DismissAttemptGuard(isDisabled: hasUnsavedChanges) {
+                    showingDiscardConfirmation = true
+                }
+            )
         }
         .preferredColorScheme(.dark)
+    }
+
+    private var currentDraft: Alarm {
+        var draft = alarm
+        let components = Calendar.current.dateComponents([.hour, .minute], from: selectedDate)
+        draft.hour = components.hour ?? draft.hour
+        draft.minute = components.minute ?? draft.minute
+        return draft
+    }
+
+    private var hasUnsavedChanges: Bool {
+        currentDraft != originalAlarm
     }
 
     private var isPreviewActive: Bool {
@@ -334,9 +387,86 @@ struct AlarmEditorView: View {
         )
     }
 
+    private var snoozeButtonLabel: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Snooze Settings")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppTheme.primary)
+                Text(alarm.snoozeEnabled ? "Every \(alarm.snoozeInterval.title), up to \(alarm.snoozeCount.title)" : "Disabled")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppTheme.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppTheme.muted)
+        }
+        // Stretch the label so the whole row, including the Spacer gap,
+        // becomes the hit area of the surrounding Button.
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+    }
+
     private func formatTime(_ value: Double) -> String {
         let seconds = max(0, Int(value.rounded()))
         return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
+    }
+
+    private func attemptDismiss() {
+        if hasUnsavedChanges {
+            showingDiscardConfirmation = true
+            return
+        }
+        discardChanges()
+    }
+
+    private func discardChanges() {
+        soundManager.stop()
+        VibrationManager.shared.stop()
+        dismiss()
+    }
+}
+
+private struct DismissAttemptGuard: UIViewControllerRepresentable {
+    let isDisabled: Bool
+    let onAttempt: () -> Void
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        UIViewController()
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        context.coordinator.isDisabled = isDisabled
+        context.coordinator.onAttempt = onAttempt
+
+        DispatchQueue.main.async {
+            uiViewController.parent?.presentationController?.delegate = context.coordinator
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(isDisabled: isDisabled, onAttempt: onAttempt)
+    }
+
+    final class Coordinator: NSObject, UIAdaptivePresentationControllerDelegate {
+        var isDisabled: Bool
+        var onAttempt: () -> Void
+
+        init(isDisabled: Bool, onAttempt: @escaping () -> Void) {
+            self.isDisabled = isDisabled
+            self.onAttempt = onAttempt
+        }
+
+        func presentationControllerShouldDismiss(_ presentationController: UIPresentationController) -> Bool {
+            !isDisabled
+        }
+
+        func presentationControllerDidAttemptToDismiss(_ presentationController: UIPresentationController) {
+            guard isDisabled else { return }
+            onAttempt()
+        }
     }
 }
 

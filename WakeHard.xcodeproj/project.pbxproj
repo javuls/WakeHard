@@ -25,7 +25,39 @@
 		001000000000000000000010 /* MusicPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000011 /* MusicPickerView.swift */; };
 		001000000000000000000011 /* keepalive.wav in Resources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000013 /* keepalive.wav */; };
 		001000000000000000000012 /* VibrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000014 /* VibrationManager.swift */; };
+		001000000000000000000013 /* SnoozeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000015 /* SnoozeEditorView.swift */; };
+		001000000000000000000014 /* AlarmRuntimeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000016 /* AlarmRuntimeStore.swift */; };
+		001000000000000000000015 /* WakeHardLiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000017 /* WakeHardLiveActivityAttributes.swift */; };
+		001000000000000000000016 /* WakeHardLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000018 /* WakeHardLiveActivityManager.swift */; };
+		001000000000000000000017 /* WakeHardLiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002000000000000000000017 /* WakeHardLiveActivityAttributes.swift */; };
+		001000000000000000000018 /* WakeHardLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001B /* WakeHardLiveActivityWidget.swift */; };
+		001000000000000000000019 /* WakeHardLiveActivityExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 002000000000000000000019 /* WakeHardLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		00100000000000000000001A /* AlarmNowPlayingInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001C /* AlarmNowPlayingInfo.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		00C000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 008000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 005000000000000000000002;
+			remoteInfo = WakeHardLiveActivityExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		00B000000000000000000001 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				001000000000000000000019 /* WakeHardLiveActivityExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		002000000000000000000001 /* WakeHardApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeHardApp.swift; sourceTree = "<group>"; };
@@ -48,10 +80,25 @@
 		002000000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		002000000000000000000013 /* keepalive.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = keepalive.wav; sourceTree = "<group>"; };
 		002000000000000000000014 /* VibrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VibrationManager.swift; sourceTree = "<group>"; };
+		002000000000000000000015 /* SnoozeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnoozeEditorView.swift; sourceTree = "<group>"; };
+		002000000000000000000016 /* AlarmRuntimeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmRuntimeStore.swift; sourceTree = "<group>"; };
+		002000000000000000000017 /* WakeHardLiveActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeHardLiveActivityAttributes.swift; sourceTree = "<group>"; };
+		002000000000000000000018 /* WakeHardLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeHardLiveActivityManager.swift; sourceTree = "<group>"; };
+		002000000000000000000019 /* WakeHardLiveActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WakeHardLiveActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		00200000000000000000001A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		00200000000000000000001B /* WakeHardLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeHardLiveActivityWidget.swift; sourceTree = "<group>"; };
+		00200000000000000000001C /* AlarmNowPlayingInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmNowPlayingInfo.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		003000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		003000000000000000000002 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -65,6 +112,7 @@
 			isa = PBXGroup;
 			children = (
 				004000000000000000000002 /* WakeHard */,
+				004000000000000000000005 /* WakeHardLiveActivityExtension */,
 				004000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -77,13 +125,18 @@
 				002000000000000000000002 /* AppDelegate.swift */,
 				002000000000000000000003 /* Alarm.swift */,
 				002000000000000000000004 /* AlarmStore.swift */,
+				002000000000000000000016 /* AlarmRuntimeStore.swift */,
 				002000000000000000000005 /* NotificationScheduler.swift */,
 				00200000000000000000000F /* BackgroundAlarmEngine.swift */,
 				002000000000000000000006 /* SoundManager.swift */,
+				00200000000000000000001C /* AlarmNowPlayingInfo.swift */,
 				002000000000000000000014 /* VibrationManager.swift */,
+				002000000000000000000017 /* WakeHardLiveActivityAttributes.swift */,
+				002000000000000000000018 /* WakeHardLiveActivityManager.swift */,
 				002000000000000000000007 /* AppTheme.swift */,
 				002000000000000000000008 /* ContentView.swift */,
 				002000000000000000000009 /* AlarmEditorView.swift */,
+				002000000000000000000015 /* SnoozeEditorView.swift */,
 				002000000000000000000011 /* MusicPickerView.swift */,
 				00200000000000000000000A /* Assets.xcassets */,
 				004000000000000000000003 /* Sounds */,
@@ -107,8 +160,18 @@
 			isa = PBXGroup;
 			children = (
 				00200000000000000000000E /* WakeHard.app */,
+				002000000000000000000019 /* WakeHardLiveActivityExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		004000000000000000000005 /* WakeHardLiveActivityExtension */ = {
+			isa = PBXGroup;
+			children = (
+				00200000000000000000001A /* Info.plist */,
+				00200000000000000000001B /* WakeHardLiveActivityWidget.swift */,
+			);
+			path = WakeHardLiveActivityExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -121,15 +184,33 @@
 				006000000000000000000001 /* Sources */,
 				003000000000000000000001 /* Frameworks */,
 				007000000000000000000001 /* Resources */,
+				00B000000000000000000001 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				00D000000000000000000001 /* PBXTargetDependency */,
 			);
 			name = WakeHard;
 			productName = WakeHard;
 			productReference = 00200000000000000000000E /* WakeHard.app */;
 			productType = "com.apple.product-type.application";
+		};
+		005000000000000000000002 /* WakeHardLiveActivityExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 009000000000000000000003 /* Build configuration list for PBXNativeTarget "WakeHardLiveActivityExtension" */;
+			buildPhases = (
+				006000000000000000000002 /* Sources */,
+				003000000000000000000002 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WakeHardLiveActivityExtension;
+			productName = WakeHardLiveActivityExtension;
+			productReference = 002000000000000000000019 /* WakeHardLiveActivityExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -160,6 +241,7 @@
 			projectRoot = "";
 			targets = (
 				005000000000000000000001 /* WakeHard */,
+				005000000000000000000002 /* WakeHardLiveActivityExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -192,15 +274,37 @@
 				001000000000000000000005 /* NotificationScheduler.swift in Sources */,
 				00100000000000000000000E /* BackgroundAlarmEngine.swift in Sources */,
 				001000000000000000000006 /* SoundManager.swift in Sources */,
+				00100000000000000000001A /* AlarmNowPlayingInfo.swift in Sources */,
 				001000000000000000000012 /* VibrationManager.swift in Sources */,
+				001000000000000000000014 /* AlarmRuntimeStore.swift in Sources */,
+				001000000000000000000015 /* WakeHardLiveActivityAttributes.swift in Sources */,
+				001000000000000000000016 /* WakeHardLiveActivityManager.swift in Sources */,
 				001000000000000000000007 /* AppTheme.swift in Sources */,
 				001000000000000000000008 /* ContentView.swift in Sources */,
 				001000000000000000000009 /* AlarmEditorView.swift in Sources */,
+				001000000000000000000013 /* SnoozeEditorView.swift in Sources */,
 				001000000000000000000010 /* MusicPickerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		006000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001000000000000000000017 /* WakeHardLiveActivityAttributes.swift in Sources */,
+				001000000000000000000018 /* WakeHardLiveActivityWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		00D000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 005000000000000000000002 /* WakeHardLiveActivityExtension */;
+			targetProxy = 00C000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		00A000000000000000000001 /* Debug */ = {
@@ -378,6 +482,66 @@
 			};
 			name = Release;
 		};
+		00A000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WVT7SB2RRK;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WakeHardLiveActivityExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.javierrivera.wakehard.liveactivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		00A000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WVT7SB2RRK;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WakeHardLiveActivityExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.javierrivera.wakehard.liveactivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -395,6 +559,15 @@
 			buildConfigurations = (
 				00A000000000000000000003 /* Debug */,
 				00A000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		009000000000000000000003 /* Build configuration list for PBXNativeTarget "WakeHardLiveActivityExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00A000000000000000000005 /* Debug */,
+				00A000000000000000000006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

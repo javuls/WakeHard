@@ -50,6 +50,12 @@ final class SoundManager: ObservableObject {
             let urlString = alarm.songAssetURLString,
             let url = URL(string: urlString)
         {
+            // Real-alarm playback path: replace any stale Now Playing info so
+            // the Dynamic Island shows our alarm icon, not whatever the system
+            // may have published from a previous playback session.
+            if loops {
+                AlarmNowPlayingInfo.startForAlarm(label: alarm.label)
+            }
             play(
                 url: url,
                 volume: volume,
@@ -213,6 +219,11 @@ final class SoundManager: ObservableObject {
         let token = UUID()
         musicStartToken = token
         completedMusicStartToken = nil
+        // The fallback work item handles the case where prepareToPlay's
+        // completion never fires. `startMusicPlayback` is idempotent via
+        // `completedMusicStartToken`, so the prepareToPlay callback below
+        // calls it directly instead of capturing the DispatchWorkItem
+        // (which isn't Sendable and would warn in Swift 6 concurrency).
         let startTask = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.startMusicPlayback(at: startTime, token: token)
@@ -221,7 +232,7 @@ final class SoundManager: ObservableObject {
         musicPlayer.prepareToPlay { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self, self.musicStartToken == token else { return }
-                startTask.perform()
+                self.startMusicPlayback(at: startTime, token: token)
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: startTask)
@@ -238,6 +249,11 @@ final class SoundManager: ObservableObject {
             ? max(baseDuration, gentleWakeDuration + 4)
             : baseDuration
         schedulePreviewReset(after: previewDuration, loops: loops)
+        // Only the live-alarm path overrides Now Playing — previews are short
+        // and leaving the song's metadata alone keeps the editor clean.
+        if loops {
+            AlarmNowPlayingInfo.startForAlarm(label: alarm.label)
+        }
         return true
     }
 

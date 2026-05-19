@@ -55,7 +55,9 @@ final class VibrationManager {
     func stop() {
         isRunning = false
         vibrationToken = UUID()
-        try? hapticEngine?.stop()
+        // CHHapticEngine.stop() (no completion handler) is non-throwing,
+        // so no `try?` is needed.
+        hapticEngine?.stop()
     }
 
     private func scheduleNextPulse(
