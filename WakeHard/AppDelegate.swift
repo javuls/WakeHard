@@ -10,11 +10,21 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    func applicationWillTerminate(_ application: UIApplication) {
+        NotificationScheduler.shared.scheduleKeepOpenWarningIfNeeded(
+            hasUpcomingAlarm: hasUpcomingAlarmForTerminationWarning()
+        )
+    }
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         let content = notification.request.content
+        guard content.categoryIdentifier != "KEEP_OPEN" else {
+            return [.banner, .list]
+        }
+
         guard content.categoryIdentifier == "ALARM" else {
             return [.banner, .list, .sound]
         }
@@ -22,7 +32,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         ScreenWakeManager.wakeScreenAndShowAlarm()
         let event = AlarmNotificationEvent(userInfo: content.userInfo)
         NotificationCenter.default.post(name: .alarmNotificationPresented, object: event)
-        return []
+        return [.banner, .list]
     }
 
     func userNotificationCenter(
@@ -30,9 +40,30 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse
     ) async {
         center.removeDeliveredNotifications(withIdentifiers: [response.notification.request.identifier])
+        let content = response.notification.request.content
+        guard content.categoryIdentifier != "KEEP_OPEN" else { return }
+
         ScreenWakeManager.wakeScreenAndShowAlarm()
-        let event = AlarmNotificationEvent(userInfo: response.notification.request.content.userInfo)
+        let event = AlarmNotificationEvent(userInfo: content.userInfo)
         NotificationCenter.default.post(name: .alarmNotificationOpened, object: event)
+    }
+
+    private func hasUpcomingAlarmForTerminationWarning() -> Bool {
+        if
+            let snooze = AlarmRuntimeStore.activeSnooze(),
+            snooze.fireDate > .now
+        {
+            return true
+        }
+
+        guard
+            let data = UserDefaults.standard.data(forKey: "wakehard.alarms.v1"),
+            let alarms = try? JSONDecoder().decode([Alarm].self, from: data)
+        else { return false }
+
+        return alarms.contains { alarm in
+            alarm.isEnabled && alarm.nextFireDate != nil
+        }
     }
 }
 
@@ -101,4 +132,5 @@ enum ScreenWakeManager {
 extension Notification.Name {
     static let alarmNotificationOpened = Notification.Name("alarmNotificationOpened")
     static let alarmNotificationPresented = Notification.Name("alarmNotificationPresented")
+    static let alarmKitAlarmOpened = Notification.Name("alarmKitAlarmOpened")
 }

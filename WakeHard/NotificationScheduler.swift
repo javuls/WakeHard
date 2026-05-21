@@ -4,17 +4,25 @@ import UserNotifications
 final class NotificationScheduler {
     static let shared = NotificationScheduler()
 
+    private let keepOpenWarningIdentifier = "wakehard.keep-open-warning"
+
     private init() {}
 
     func configure() {
         let open = UNNotificationAction(identifier: "OPEN_APP", title: "Open WakeHard", options: [.foreground])
-        let category = UNNotificationCategory(
+        let alarmCategory = UNNotificationCategory(
             identifier: "ALARM",
             actions: [open],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
-        UNUserNotificationCenter.current().setNotificationCategories([category])
+        let keepOpenCategory = UNNotificationCategory(
+            identifier: "KEEP_OPEN",
+            actions: [open],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([alarmCategory, keepOpenCategory])
     }
 
     func requestAuthorizationIfNeeded() async {
@@ -143,6 +151,39 @@ final class NotificationScheduler {
         )
     }
 
+    func scheduleKeepOpenWarningIfNeeded(hasUpcomingAlarm: Bool) {
+        guard hasUpcomingAlarm else {
+            cancelKeepOpenWarning()
+            return
+        }
+
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [keepOpenWarningIdentifier])
+
+        let content = UNMutableNotificationContent()
+        content.title = "Open WakeHard again"
+        content.body = "Keep WakeHard open in the background so selected songs and gentle wake can ring."
+        content.categoryIdentifier = "KEEP_OPEN"
+        content.userInfo = ["wakehardEvent": "keepOpenWarning"]
+
+        if #available(iOS 15.0, *) {
+            content.interruptionLevel = .timeSensitive
+        }
+
+        let request = UNNotificationRequest(
+            identifier: keepOpenWarningIdentifier,
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        )
+        center.add(request)
+    }
+
+    func cancelKeepOpenWarning() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [keepOpenWarningIdentifier])
+        center.removeDeliveredNotifications(withIdentifiers: [keepOpenWarningIdentifier])
+    }
+
     private func addSnoozeStatusNotification(alarm: Alarm, fireDate: Date, remainingSnoozes: Int?) {
         let content = UNMutableNotificationContent()
         content.title = "Snoozed"
@@ -186,7 +227,7 @@ final class NotificationScheduler {
 
     private func notificationSound(for alarm: Alarm) -> UNNotificationSound? {
         guard shouldUseAudibleFailSafe(for: alarm) else { return nil }
-        return UNNotificationSound(named: UNNotificationSoundName(alarm.sound.fileName))
+        return UNNotificationSound(named: UNNotificationSoundName(alarm.systemAlertSoundFileName))
     }
 
     private func shouldUseAudibleFailSafe(for alarm: Alarm) -> Bool {

@@ -260,14 +260,22 @@ struct ContentView: View {
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
-                guard newPhase == .active else { return }
-                restoreActiveAlarmState()
+                switch newPhase {
+                case .active:
+                    NotificationScheduler.shared.cancelKeepOpenWarning()
+                    restoreActiveAlarmState()
+                default:
+                    break
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .alarmNotificationOpened)) { notification in
-                presentAlarmFromNotification(notification.object)
+                presentAlarmFromNotification(notification.object, openedByUser: true)
             }
             .onReceive(NotificationCenter.default.publisher(for: .alarmNotificationPresented)) { notification in
-                presentAlarmFromNotification(notification.object)
+                presentAlarmFromNotification(notification.object, openedByUser: false)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .alarmKitAlarmOpened)) { notification in
+                presentAlarmFromAlarmKit(notification.object)
             }
             .onReceive(NotificationCenter.default.publisher(for: .backgroundAlarmFired)) { notification in
                 if let alarm = notification.object as? Alarm {
@@ -375,7 +383,22 @@ struct ContentView: View {
         Task { await WakeHardLiveActivityManager.endSnooze() }
     }
 
-    private func presentAlarmFromNotification(_ object: Any?) {
+    private func presentAlarmFromAlarmKit(_ object: Any?) {
+        guard
+            let id = object as? UUID,
+            let alarm = alarmStore.alarms.first(where: { $0.id == id })
+        else {
+            restoreActiveAlarmState()
+            return
+        }
+
+        if showPendingSnoozeIfNeeded(for: alarm) {
+            return
+        }
+        presentRingingAlarm(alarm, stopSystemAlarm: true, clearDeliveredNotification: true)
+    }
+
+    private func presentAlarmFromNotification(_ object: Any?, openedByUser: Bool) {
         guard let event = object as? AlarmNotificationEvent else {
             ringingAlarm = nextAlarm ?? alarmStore.alarms.first
             return
@@ -396,7 +419,11 @@ struct ContentView: View {
             if showPendingSnoozeIfNeeded(for: alarm) {
                 return
             }
-            presentRingingAlarm(alarm)
+            presentRingingAlarm(
+                alarm,
+                stopSystemAlarm: openedByUser,
+                clearDeliveredNotification: openedByUser
+            )
         }
     }
 
@@ -409,7 +436,11 @@ struct ContentView: View {
             NotificationScheduler.shared.cancelSnooze(for: alarm)
         }
         Task { await WakeHardLiveActivityManager.endSnooze() }
-        presentRingingAlarm(alarm)
+        presentRingingAlarm(
+            alarm,
+            stopSystemAlarm: clearNotification,
+            clearDeliveredNotification: clearNotification
+        )
     }
 
     private func showPendingSnoozeIfNeeded(for alarm: Alarm) -> Bool {
@@ -435,8 +466,18 @@ struct ContentView: View {
         showDismissGreeting(after: 300_000_000)
     }
 
-    private func presentRingingAlarm(_ alarm: Alarm) {
+    private func presentRingingAlarm(
+        _ alarm: Alarm,
+        stopSystemAlarm: Bool = false,
+        clearDeliveredNotification: Bool = false
+    ) {
         AlarmRuntimeStore.setRingingAlarm(alarm.id)
+        if stopSystemAlarm {
+            AlarmKitScheduler.shared.stopAlertingAlarm(id: alarm.id)
+        }
+        if clearDeliveredNotification {
+            NotificationScheduler.shared.clearDeliveredAlarm(for: alarm)
+        }
         WakeHardLiveActivityManager.startRinging(alarm: alarm)
         if alarm.skippedFireDate != nil {
             alarmStore.clearSkip(for: alarm)
@@ -479,22 +520,36 @@ struct ContentView: View {
     }
 
     private func restoreActiveAlarmState() {
+        if restoreRingingIfNeeded(stopSystemAlarm: true) {
+            return
+        }
         if restoreSnoozeIfNeeded() {
             return
         }
-        restoreRingingIfNeeded()
     }
 
-    private func restoreRingingIfNeeded() {
-        guard ringingAlarm == nil else { return }
+    @discardableResult
+    private func restoreRingingIfNeeded(stopSystemAlarm: Bool = false) -> Bool {
         guard
             let ringingID = AlarmRuntimeStore.ringingAlarmID(),
             let alarm = alarmStore.alarms.first(where: { $0.id == ringingID })
         else {
             clearRingingAlarm()
-            return
+            return false
         }
-        ringingAlarm = alarm
+
+        snoozeTask?.cancel()
+        snoozeTask = nil
+        snoozeState = nil
+        activeSnooze = nil
+        clearPersistedSnooze()
+
+        presentRingingAlarm(
+            alarm,
+            stopSystemAlarm: stopSystemAlarm,
+            clearDeliveredNotification: false
+        )
+        return true
     }
 
     @discardableResult

@@ -20,6 +20,7 @@ final class SoundManager: ObservableObject {
     private var musicStartToken: UUID?
     private var completedMusicStartToken: UUID?
     private var activePlayback: ActivePlayback?
+    private let minimumRampVolume: Float = 0.01
 
     private enum ActivePlayback {
         case audio
@@ -188,13 +189,7 @@ final class SoundManager: ObservableObject {
     private func playMediaLibrarySong(for alarm: Alarm, loops: Bool) -> Bool {
         guard let persistentID = alarm.songPersistentID else { return false }
         let volume = Float(alarm.volume)
-        // Honor gentle-wake ramp for preview as well as the live alarm.
         let gentleWakeDuration = alarm.gentleWakeDuration.duration
-        guard gentleWakeDuration <= 0 else {
-            // MPMusicPlayerController cannot ramp per-player volume reliably.
-            // Fall back to the built-in backup tone so preview matches runtime.
-            return false
-        }
 
         let query = MPMediaQuery.songs()
         let predicate = MPMediaPropertyPredicate(
@@ -211,7 +206,7 @@ final class SoundManager: ObservableObject {
         let needsLoopForRamp = gentleWakeDuration > 0
             && naturalSegmentDuration < gentleWakeDuration + 1
         let effectiveLoops = loops || needsLoopForRamp
-        setSystemVolume(volume)
+        setSystemVolume(gentleWakeDuration > 0 ? minimumRampVolume : volume)
         musicPlayer.setQueue(with: MPMediaItemCollection(items: [item]))
         musicPlayer.repeatMode = effectiveLoops && !alarm.hasClipLoop ? .one : .none
         activePlayback = .music
@@ -228,13 +223,23 @@ final class SoundManager: ObservableObject {
         // (which isn't Sendable and would warn in Swift 6 concurrency).
         let startTask = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.startMusicPlayback(at: startTime, token: token)
+            self.startMusicPlayback(
+                at: startTime,
+                token: token,
+                targetVolume: volume,
+                gentleWakeDuration: gentleWakeDuration
+            )
         }
         pendingMusicStartTask = startTask
         musicPlayer.prepareToPlay { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self, self.musicStartToken == token else { return }
-                self.startMusicPlayback(at: startTime, token: token)
+                self.startMusicPlayback(
+                    at: startTime,
+                    token: token,
+                    targetVolume: volume,
+                    gentleWakeDuration: gentleWakeDuration
+                )
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: startTask)
@@ -259,7 +264,12 @@ final class SoundManager: ObservableObject {
         return true
     }
 
-    private func startMusicPlayback(at startTime: Double, token: UUID) {
+    private func startMusicPlayback(
+        at startTime: Double,
+        token: UUID,
+        targetVolume: Float,
+        gentleWakeDuration: TimeInterval
+    ) {
         guard musicStartToken == token, completedMusicStartToken != token else { return }
         completedMusicStartToken = token
         pendingMusicStartTask?.cancel()
@@ -267,6 +277,9 @@ final class SoundManager: ObservableObject {
         musicPlayer.currentPlaybackTime = startTime
         previewPlaybackTime = startTime
         musicPlayer.play()
+        if gentleWakeDuration > 0 {
+            startSystemVolumeRamp(to: targetVolume, duration: gentleWakeDuration)
+        }
 
         for delay in [0.12, 0.35, 0.75] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
@@ -356,8 +369,42 @@ final class SoundManager: ObservableObject {
     private func setSystemVolume(_ volume: Float) {
         attachVolumeViewIfNeeded()
         guard let slider = volumeView.subviews.compactMap({ $0 as? UISlider }).first else { return }
+        let clampedVolume = min(1, max(0, volume))
+        slider.value = clampedVolume
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            slider.value = volume
+            slider.value = clampedVolume
+        }
+    }
+
+    private func startSystemVolumeRamp(to targetVolume: Float, duration: TimeInterval) {
+        volumeRampTask?.cancel()
+        volumeRampTask = nil
+
+        guard duration > 0 else {
+            setSystemVolume(targetVolume)
+            return
+        }
+
+        setSystemVolume(minimumRampVolume)
+        let startedAt = Date()
+        volumeRampTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            while !Task.isCancelled {
+                guard self.activePlayback == .music else { return }
+
+                let progress = min(1, Date().timeIntervalSince(startedAt) / duration)
+                let rampedVolume = max(self.minimumRampVolume, targetVolume * Float(progress))
+                self.setSystemVolume(rampedVolume)
+
+                guard progress < 1 else { break }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+
+            if !Task.isCancelled {
+                self.setSystemVolume(targetVolume)
+                self.volumeRampTask = nil
+            }
         }
     }
 

@@ -245,6 +245,10 @@ struct Alarm: Identifiable, Codable, Equatable {
     var hasSelectedSong: Bool {
         songPersistentID != nil || songAssetURLString != nil || songTitle != nil
     }
+
+    var systemAlertSoundFileName: String {
+        hasSelectedSong ? "silence.wav" : sound.fileName
+    }
 }
 
 enum Weekday: Int, Codable, CaseIterable, Identifiable {

@@ -26,6 +26,7 @@ final class BackgroundAlarmEngine: ObservableObject {
     private var activeAlarmPlayback: ActiveAlarmPlayback?
     private var musicStartToken: UUID?
     private let volumeView = MPVolumeView(frame: .zero)
+    private let minimumRampVolume: Float = 0.01
 
     private enum ActiveAlarmPlayback {
         case audio
@@ -305,12 +306,6 @@ final class BackgroundAlarmEngine: ObservableObject {
 
     private func playMediaLibrarySongIfNeeded(for alarm: Alarm, fallbackVolume: Float) -> Bool {
         guard let persistentID = alarm.songPersistentID else { return false }
-        guard alarm.gentleWakeDuration == .off else {
-            // MPMusicPlayerController has no per-player volume. The old system
-            // volume ramp was unreliable and could jump to full volume, so use
-            // the backup AVAudioPlayer tone when gentle wake must be honored.
-            return false
-        }
 
         let query = MPMediaQuery.songs()
         let predicate = MPMediaPropertyPredicate(
@@ -321,7 +316,8 @@ final class BackgroundAlarmEngine: ObservableObject {
 
         guard let item = query.items?.first else { return false }
         let targetVolume = Float(alarm.volume)
-        setSystemVolume(targetVolume)
+        let gentleWakeDuration = alarm.gentleWakeDuration.duration
+        setSystemVolume(gentleWakeDuration > 0 ? minimumRampVolume : targetVolume)
         musicPlayer.setQueue(with: MPMediaItemCollection(items: [item]))
         musicPlayer.repeatMode = alarm.hasClipLoop ? .none : .one
         let startTime = alarm.effectivePlaybackStartTime
@@ -330,12 +326,22 @@ final class BackgroundAlarmEngine: ObservableObject {
         musicPlayer.prepareToPlay { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self, self.musicStartToken == token else { return }
-                self.startAlarmMusicPlayback(at: startTime, token: token)
+                self.startAlarmMusicPlayback(
+                    at: startTime,
+                    token: token,
+                    targetVolume: targetVolume,
+                    gentleWakeDuration: gentleWakeDuration
+                )
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
             guard let self, self.musicStartToken == token else { return }
-            self.startAlarmMusicPlayback(at: startTime, token: token)
+            self.startAlarmMusicPlayback(
+                at: startTime,
+                token: token,
+                targetVolume: targetVolume,
+                gentleWakeDuration: gentleWakeDuration
+            )
         }
         scheduleMusicLoopIfNeeded(alarm: alarm)
         // Override the system Now Playing info so the Dynamic Island shows
@@ -386,10 +392,18 @@ final class BackgroundAlarmEngine: ObservableObject {
         }
     }
 
-    private func startAlarmMusicPlayback(at startTime: Double, token: UUID) {
+    private func startAlarmMusicPlayback(
+        at startTime: Double,
+        token: UUID,
+        targetVolume: Float,
+        gentleWakeDuration: TimeInterval
+    ) {
         guard musicStartToken == token, activeAlarmPlayback == .music else { return }
         musicPlayer.currentPlaybackTime = startTime
         musicPlayer.play()
+        if gentleWakeDuration > 0, volumeRampTask == nil {
+            startSystemVolumeRamp(to: targetVolume, duration: gentleWakeDuration)
+        }
         AlarmNowPlayingInfo.refresh()
 
         for delay in [0.12, 0.35, 0.75] {
@@ -439,8 +453,42 @@ final class BackgroundAlarmEngine: ObservableObject {
     private func setSystemVolume(_ volume: Float) {
         attachVolumeViewIfNeeded()
         guard let slider = volumeView.subviews.compactMap({ $0 as? UISlider }).first else { return }
+        let clampedVolume = min(1, max(0, volume))
+        slider.value = clampedVolume
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            slider.value = volume
+            slider.value = clampedVolume
+        }
+    }
+
+    private func startSystemVolumeRamp(to targetVolume: Float, duration: TimeInterval) {
+        volumeRampTask?.cancel()
+        volumeRampTask = nil
+
+        guard duration > 0 else {
+            setSystemVolume(targetVolume)
+            return
+        }
+
+        setSystemVolume(minimumRampVolume)
+        let startedAt = Date()
+        volumeRampTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            while !Task.isCancelled {
+                guard self.activeAlarmPlayback == .music else { return }
+
+                let progress = min(1, Date().timeIntervalSince(startedAt) / duration)
+                let rampedVolume = max(self.minimumRampVolume, targetVolume * Float(progress))
+                self.setSystemVolume(rampedVolume)
+
+                guard progress < 1 else { break }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+
+            if !Task.isCancelled {
+                self.setSystemVolume(targetVolume)
+                self.volumeRampTask = nil
+            }
         }
     }
 

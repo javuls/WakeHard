@@ -3,6 +3,7 @@ import Foundation
 #if canImport(AlarmKit)
 import ActivityKit
 import AlarmKit
+import AppIntents
 import SwiftUI
 #endif
 
@@ -58,7 +59,7 @@ final class AlarmKitScheduler {
             guard !Task.isCancelled else { return }
             do {
                 try? AlarmManager.shared.cancel(id: alarm.id)
-                try await AlarmManager.shared.schedule(
+                _ = try await AlarmManager.shared.schedule(
                     id: alarm.id,
                     configuration: alarmKitConfiguration(for: alarm)
                 )
@@ -80,6 +81,8 @@ final class AlarmKitScheduler {
                 return false
             case .notDetermined:
                 return try await AlarmManager.shared.requestAuthorization() == .authorized
+            @unknown default:
+                return false
             }
         } catch {
             print("AlarmKit authorization failed: \(error)")
@@ -95,6 +98,21 @@ final class AlarmKitScheduler {
             try? AlarmManager.shared.cancel(id: id)
         }
         persistedScheduledIDs = []
+    }
+
+    func stopAlertingAlarm(id: UUID) {
+        guard #available(iOS 26.0, *) else { return }
+
+        do {
+            guard
+                let alarm = try AlarmManager.shared.alarms.first(where: { $0.id == id }),
+                alarm.state == .alerting
+            else { return }
+
+            try AlarmManager.shared.stop(id: id)
+        } catch {
+            print("AlarmKit stop failed for \(id): \(error)")
+        }
     }
 
     private var persistedScheduledIDs: Set<UUID> {
@@ -131,13 +149,28 @@ private extension AlarmKitScheduler {
         return .alarm(
             schedule: alarmKitSchedule(for: alarm),
             attributes: attributes,
-            sound: .named(alarm.sound.fileName)
+            stopIntent: OpenWakeHardAlarmIntent(alarmID: alarm.id),
+            secondaryIntent: OpenWakeHardAlarmIntent(alarmID: alarm.id),
+            // AlarmKit can only play system or bundled app sounds. For
+            // selected songs, use silence so the system surface appears
+            // without playing a backup tone before WakeHard starts the song.
+            sound: .named(alarm.systemAlertSoundFileName)
         )
     }
 
     func alertPresentation(title: LocalizedStringResource) -> AlarmPresentation.Alert {
+        let openButton = AlarmButton(
+            text: "Open WakeHard",
+            textColor: .white,
+            systemImageName: "arrow.up.forward.app"
+        )
+
         if #available(iOS 26.1, *) {
-            return AlarmPresentation.Alert(title: title)
+            return AlarmPresentation.Alert(
+                title: title,
+                secondaryButton: openButton,
+                secondaryButtonBehavior: .custom
+            )
         }
 
         let stopButton = AlarmButton(
@@ -145,7 +178,12 @@ private extension AlarmKitScheduler {
             textColor: .white,
             systemImageName: "xmark"
         )
-        return AlarmPresentation.Alert(title: title, stopButton: stopButton)
+        return AlarmPresentation.Alert(
+            title: title,
+            stopButton: stopButton,
+            secondaryButton: openButton,
+            secondaryButtonBehavior: .custom
+        )
     }
 
     func alarmKitSchedule(for alarm: Alarm) -> AlarmKit.Alarm.Schedule? {
@@ -174,6 +212,34 @@ private extension Weekday {
         case .friday: return .friday
         case .saturday: return .saturday
         }
+    }
+}
+
+@available(iOS 26.0, *)
+struct OpenWakeHardAlarmIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Open WakeHard"
+    static var description = IntentDescription("Open WakeHard to the ringing alarm screen.")
+    static var supportedModes: IntentModes { .foreground(.immediate) }
+    static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
+
+    @Parameter(title: "Alarm ID") var alarmID: String
+
+    init() {
+        alarmID = ""
+    }
+
+    init(alarmID: UUID) {
+        self.alarmID = alarmID.uuidString
+    }
+
+    func perform() async throws -> some IntentResult {
+        guard let id = UUID(uuidString: alarmID) else { return .result() }
+        await MainActor.run {
+            AlarmKitScheduler.shared.stopAlertingAlarm(id: id)
+            AlarmRuntimeStore.setRingingAlarm(id)
+            NotificationCenter.default.post(name: .alarmKitAlarmOpened, object: id)
+        }
+        return .result()
     }
 }
 #endif
