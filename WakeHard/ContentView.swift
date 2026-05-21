@@ -358,6 +358,7 @@ struct ContentView: View {
             remainingSnoozes: nextRemaining,
             showStatusNotification: true
         )
+        AlarmKitScheduler.shared.scheduleSnooze(alarm: alarm, fireDate: fireDate)
 
         scheduleSnoozeTask(for: state)
     }
@@ -462,6 +463,7 @@ struct ContentView: View {
             alarmStore.toggle(alarm, isEnabled: false)
         }
         backgroundEngine.stopAlarmAndRearm(alarms: alarmStore.alarms)
+        AlarmKitScheduler.shared.sync(alarms: alarmStore.alarms)
         refreshUpcomingLiveActivity()
         showDismissGreeting(after: 300_000_000)
     }
@@ -588,6 +590,7 @@ struct ContentView: View {
             fireDate: persisted.fireDate,
             remainingSnoozes: persisted.remainingSnoozes
         )
+        AlarmKitScheduler.shared.scheduleSnooze(alarm: alarm, fireDate: persisted.fireDate)
         scheduleSnoozeTask(for: state)
         return true
     }
@@ -607,6 +610,7 @@ struct ContentView: View {
             alarmStore.toggle(alarm, isEnabled: false)
         }
         backgroundEngine.stopAlarmAndRearm(alarms: alarmStore.alarms)
+        AlarmKitScheduler.shared.sync(alarms: alarmStore.alarms)
         refreshUpcomingLiveActivity()
         showDismissGreeting(after: 300_000_000)
     }

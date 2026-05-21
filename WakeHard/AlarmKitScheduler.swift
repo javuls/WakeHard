@@ -41,6 +41,16 @@ final class AlarmKitScheduler {
         }
     }
 
+    func scheduleSnooze(alarm: Alarm, fireDate: Date) {
+        guard #available(iOS 26.0, *) else { return }
+
+        syncTask?.cancel()
+        syncTask = Task { [weak self] in
+            guard let self else { return }
+            await self.scheduleSnoozeOnSupportedSystem(alarm: alarm, fireDate: fireDate)
+        }
+    }
+
     @available(iOS 26.0, *)
     private func syncOnSupportedSystem(alarms: [Alarm]) async {
         guard await requestAuthorization() else { return }
@@ -69,6 +79,22 @@ final class AlarmKitScheduler {
         }
 
         persistedScheduledIDs = desiredIDs
+    }
+
+    @available(iOS 26.0, *)
+    private func scheduleSnoozeOnSupportedSystem(alarm: Alarm, fireDate: Date) async {
+        guard await requestAuthorization() else { return }
+
+        do {
+            try? AlarmManager.shared.cancel(id: alarm.id)
+            _ = try await AlarmManager.shared.schedule(
+                id: alarm.id,
+                configuration: alarmKitConfiguration(for: alarm, schedule: .fixed(fireDate))
+            )
+            persistedScheduledIDs.insert(alarm.id)
+        } catch {
+            print("AlarmKit snooze scheduling failed for \(alarm.id): \(error)")
+        }
     }
 
     @available(iOS 26.0, *)
@@ -137,6 +163,13 @@ private struct WakeHardAlarmMetadata: AlarmMetadata {
 @available(iOS 26.0, *)
 private extension AlarmKitScheduler {
     func alarmKitConfiguration(for alarm: Alarm) -> AlarmManager.AlarmConfiguration<WakeHardAlarmMetadata> {
+        alarmKitConfiguration(for: alarm, schedule: alarmKitSchedule(for: alarm))
+    }
+
+    func alarmKitConfiguration(
+        for alarm: Alarm,
+        schedule: AlarmKit.Alarm.Schedule?
+    ) -> AlarmManager.AlarmConfiguration<WakeHardAlarmMetadata> {
         let label = alarm.label.isEmpty ? "WakeHard" : alarm.label
         let title = LocalizedStringResource(stringLiteral: label)
         let presentation = AlarmPresentation(alert: alertPresentation(title: title))
@@ -147,7 +180,7 @@ private extension AlarmKitScheduler {
         )
 
         return .alarm(
-            schedule: alarmKitSchedule(for: alarm),
+            schedule: schedule,
             attributes: attributes,
             stopIntent: OpenWakeHardAlarmIntent(alarmID: alarm.id),
             secondaryIntent: OpenWakeHardAlarmIntent(alarmID: alarm.id),
