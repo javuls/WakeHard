@@ -40,6 +40,12 @@ final class NotificationScheduler {
     }
 
     private func schedule(alarm: Alarm) {
+        if alarm.skippedFireDate != nil, let nextDate = alarm.nextFireDate {
+            let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: nextDate)
+            addRequest(alarm: alarm, components: components, repeats: false, suffix: "skip-once-next")
+            return
+        }
+
         if alarm.weekdays.isEmpty {
             scheduleOnce(alarm: alarm)
             return
@@ -68,7 +74,7 @@ final class NotificationScheduler {
         content.subtitle = alarm.label.isEmpty ? "WakeHard" : alarm.label
         content.body = "Slide or tap to open WakeHard"
         content.categoryIdentifier = "ALARM"
-        content.sound = UNNotificationSound(named: UNNotificationSoundName(alarm.sound.fileName))
+        content.sound = notificationSound(for: alarm)
         content.userInfo = [
             "alarmID": alarm.id.uuidString,
             "alarmEvent": "alarm"
@@ -102,7 +108,7 @@ final class NotificationScheduler {
         content.subtitle = alarm.label.isEmpty ? "WakeHard" : alarm.label
         content.body = "Snooze is over. Slide or tap to open WakeHard"
         content.categoryIdentifier = "ALARM"
-        content.sound = UNNotificationSound(named: UNNotificationSoundName(alarm.sound.fileName))
+        content.sound = notificationSound(for: alarm)
         content.userInfo = [
             "alarmID": alarm.id.uuidString,
             "alarmEvent": "snoozeRing"
@@ -129,6 +135,12 @@ final class NotificationScheduler {
         let identifiers = snoozeNotificationIdentifiers(for: alarm)
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
         center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    func clearDeliveredAlarm(for alarm: Alarm) {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(
+            withIdentifiers: deliveredAlarmNotificationIdentifiers(for: alarm)
+        )
     }
 
     private func addSnoozeStatusNotification(alarm: Alarm, fireDate: Date, remainingSnoozes: Int?) {
@@ -172,8 +184,21 @@ final class NotificationScheduler {
         ]
     }
 
+    private func notificationSound(for alarm: Alarm) -> UNNotificationSound? {
+        guard shouldUseAudibleFailSafe(for: alarm) else { return nil }
+        return UNNotificationSound(named: UNNotificationSoundName(alarm.sound.fileName))
+    }
+
+    private func shouldUseAudibleFailSafe(for alarm: Alarm) -> Bool {
+        if !alarm.hasSelectedSong, alarm.gentleWakeDuration == .off {
+            return true
+        }
+
+        return AppSettings.failSafeBackupSound
+    }
+
     private func deliveredAlarmNotificationIdentifiers(for alarm: Alarm) -> [String] {
-        var identifiers = ["\(alarm.id.uuidString)-once"]
+        var identifiers = ["\(alarm.id.uuidString)-once", "\(alarm.id.uuidString)-skip-once-next"]
         identifiers.append(contentsOf: Weekday.allCases.map { "\(alarm.id.uuidString)-\($0.shortTitle)" })
         identifiers.append(contentsOf: snoozeNotificationIdentifiers(for: alarm))
         return identifiers

@@ -192,7 +192,14 @@ private struct CountButton: View {
     }
 }
 
+private struct SnoozeEditorPreviewHost: View {
+    @State private var alarm = Alarm()
+
+    var body: some View {
+        SnoozeEditorView(alarm: $alarm)
+    }
+}
+
 #Preview {
-    @State var alarm = Alarm()
-    return SnoozeEditorView(alarm: $alarm)
+    SnoozeEditorPreviewHost()
 }

@@ -6,6 +6,7 @@ final class AlarmStore: ObservableObject {
         didSet {
             save()
             NotificationScheduler.shared.rescheduleAll(alarms: alarms)
+            AlarmKitScheduler.shared.sync(alarms: alarms)
             BackgroundAlarmEngine.shared.arm(alarms: alarms)
         }
     }
@@ -22,6 +23,7 @@ final class AlarmStore: ObservableObject {
         }
 
         NotificationScheduler.shared.rescheduleAll(alarms: alarms)
+        AlarmKitScheduler.shared.sync(alarms: alarms)
         BackgroundAlarmEngine.shared.arm(alarms: alarms)
     }
 
@@ -38,9 +40,39 @@ final class AlarmStore: ObservableObject {
         alarms.remove(atOffsets: offsets)
     }
 
+    func delete(_ alarm: Alarm) {
+        alarms.removeAll { $0.id == alarm.id }
+    }
+
+    func duplicate(_ alarm: Alarm) {
+        var copy = alarm
+        copy.id = UUID()
+        copy.skippedFireDate = nil
+        if let index = alarms.firstIndex(where: { $0.id == alarm.id }) {
+            alarms.insert(copy, at: alarms.index(after: index))
+        } else {
+            alarms.append(copy)
+        }
+    }
+
     func toggle(_ alarm: Alarm, isEnabled: Bool) {
         guard let index = alarms.firstIndex(where: { $0.id == alarm.id }) else { return }
         alarms[index].isEnabled = isEnabled
+        if isEnabled {
+            alarms[index].skippedFireDate = nil
+        }
+    }
+
+    func skipOnce(_ alarm: Alarm) {
+        guard let index = alarms.firstIndex(where: { $0.id == alarm.id }) else { return }
+        let skippedFireDate = alarms[index].nextScheduledFireDateIgnoringSkip()
+        alarms[index].isEnabled = true
+        alarms[index].skippedFireDate = skippedFireDate
+    }
+
+    func clearSkip(for alarm: Alarm) {
+        guard let index = alarms.firstIndex(where: { $0.id == alarm.id }) else { return }
+        alarms[index].skippedFireDate = nil
     }
 
     private func load() {

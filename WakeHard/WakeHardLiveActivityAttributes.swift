@@ -2,6 +2,8 @@ import ActivityKit
 import Foundation
 
 enum WakeHardLiveActivityMode: String, Codable, Hashable {
+    case nextAlarm
+    case skippedOnce
     case ringing
     case snoozed
 }

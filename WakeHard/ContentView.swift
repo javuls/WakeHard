@@ -1,5 +1,45 @@
 import SwiftUI
 
+enum AppSettings {
+    enum Keys {
+        static let liveActivityRinging = "wakehard.settings.liveActivityRinging"
+        static let liveActivitySnooze = "wakehard.settings.liveActivitySnooze"
+        static let liveActivitySkippedOnce = "wakehard.settings.liveActivitySkippedOnce"
+        static let liveActivityNextAlarm = "wakehard.settings.liveActivityNextAlarm"
+        static let failSafeBackupSound = "wakehard.settings.failSafeBackupSound"
+    }
+
+    static func registerDefaults() {
+        UserDefaults.standard.register(defaults: [
+            Keys.liveActivityRinging: true,
+            Keys.liveActivitySnooze: true,
+            Keys.liveActivitySkippedOnce: true,
+            Keys.liveActivityNextAlarm: true,
+            Keys.failSafeBackupSound: true
+        ])
+    }
+
+    static var liveActivityRinging: Bool {
+        UserDefaults.standard.object(forKey: Keys.liveActivityRinging) as? Bool ?? true
+    }
+
+    static var liveActivitySnooze: Bool {
+        UserDefaults.standard.object(forKey: Keys.liveActivitySnooze) as? Bool ?? true
+    }
+
+    static var liveActivitySkippedOnce: Bool {
+        UserDefaults.standard.object(forKey: Keys.liveActivitySkippedOnce) as? Bool ?? true
+    }
+
+    static var liveActivityNextAlarm: Bool {
+        UserDefaults.standard.object(forKey: Keys.liveActivityNextAlarm) as? Bool ?? true
+    }
+
+    static var failSafeBackupSound: Bool {
+        UserDefaults.standard.object(forKey: Keys.failSafeBackupSound) as? Bool ?? true
+    }
+}
+
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var alarmStore: AlarmStore
@@ -7,6 +47,7 @@ struct ContentView: View {
     @ObservedObject private var backgroundEngine = BackgroundAlarmEngine.shared
     @State private var editingAlarm: Alarm?
     @State private var isAddingAlarm = false
+    @State private var previewAlarm: Alarm?
     @State private var ringingAlarm: Alarm?
     @State private var snoozeState: SnoozeState?
     @State private var activeSnooze: ActiveSnooze?
@@ -15,6 +56,11 @@ struct ContentView: View {
     @State private var saveToastTask: Task<Void, Never>?
     @State private var dismissGreeting: DismissGreeting?
     @State private var dismissGreetingTask: Task<Void, Never>?
+    @State private var skipPrompt: SkipOncePrompt?
+    @State private var isAddMenuOpen = false
+    @State private var isShowingQuickAlarm = false
+    @State private var isShowingSettings = false
+    @State private var quickAlarmDeleteCandidate: Alarm?
 
     var body: some View {
         NavigationStack {
@@ -23,26 +69,67 @@ struct ContentView: View {
                 VStack(spacing: 18) {
                     HeaderView(nextAlarm: nextAlarm) {
                         guard let nextAlarm else { return }
+                        guard !nextAlarm.isQuickAlarm else { return }
                         editingAlarm = nextAlarm
                     }
                     List {
                         ForEach(alarmStore.alarms) { alarm in
-                            AlarmRow(alarm: alarm)
+                            AlarmRow(
+                                alarm: alarm,
+                                isShowingSkipPrompt: skipPrompt?.alarm.id == alarm.id,
+                                onToggle: { handleAlarmToggle(alarm, isEnabled: $0) },
+                                onSkipOnce: {
+                                    alarmStore.skipOnce(alarm)
+                                    refreshUpcomingLiveActivity()
+                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                                        skipPrompt = nil
+                                    }
+                                },
+                                onTurnOff: {
+                                    withAnimation(.easeInOut(duration: 0.18)) {
+                                        skipPrompt = nil
+                                    }
+                                },
+                                onDelete: {
+                                    alarmStore.delete(alarm)
+                                    refreshUpcomingLiveActivity()
+                                },
+                                onPreview: {
+                                    previewAlarm = alarm
+                                },
+                                onDuplicate: {
+                                    alarmStore.duplicate(alarm)
+                                    refreshUpcomingLiveActivity()
+                                },
+                                onEdit: {
+                                    guard !alarm.isQuickAlarm else { return }
+                                    editingAlarm = alarm
+                                }
+                            )
                                 .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
                                 .listRowSeparator(.hidden)
                                 .listRowBackground(Color.clear)
-                                .contentShape(Rectangle())
-                                .onTapGesture { editingAlarm = alarm }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
+                                        if alarm.isQuickAlarm {
+                                            quickAlarmDeleteCandidate = alarm
+                                            return
+                                        }
                                         if let index = alarmStore.alarms.firstIndex(where: { $0.id == alarm.id }) {
                                             alarmStore.delete(at: IndexSet(integer: index))
+                                            refreshUpcomingLiveActivity()
                                         }
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
                                 }
                         }
+
+                        Color.clear
+                            .frame(height: 280)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -64,31 +151,75 @@ struct ContentView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                         .zIndex(3)
                 }
+
+                FloatingAddMenuView(
+                    isOpen: $isAddMenuOpen,
+                    onQuickAlarm: {
+                        isAddMenuOpen = false
+                        isShowingQuickAlarm = true
+                    },
+                    onAlarm: {
+                        isAddMenuOpen = false
+                        isAddingAlarm = true
+                    }
+                )
+                .zIndex(5)
             }
             .navigationTitle("WakeHard")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        isAddingAlarm = true
+                        isShowingSettings = true
                     } label: {
-                        Image(systemName: "plus")
+                        Image(systemName: "gearshape.fill")
                     }
                     .buttonStyle(IconButtonStyle())
-                    .accessibilityLabel("Add alarm")
+                    .accessibilityLabel("Settings")
                 }
             }
             .sheet(isPresented: $isAddingAlarm) {
                 AlarmEditorView(alarm: Alarm()) { alarm in
                     alarmStore.add(alarm)
                     showAlarmSavedToast(for: alarm)
+                    refreshUpcomingLiveActivity()
+                }
+            }
+            .sheet(isPresented: $isShowingQuickAlarm) {
+                QuickAlarmEditorView { alarm in
+                    alarmStore.add(alarm)
+                    showAlarmSavedToast(for: alarm)
+                    refreshUpcomingLiveActivity()
+                }
+                .presentationDetents([.height(660)])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isShowingSettings) {
+                SettingsView {
+                    NotificationScheduler.shared.rescheduleAll(alarms: alarmStore.alarms)
+                    refreshUpcomingLiveActivity()
                 }
             }
             .sheet(item: $editingAlarm) { alarm in
                 AlarmEditorView(alarm: alarm) { updatedAlarm in
                     alarmStore.update(updatedAlarm)
                     showAlarmSavedToast(for: updatedAlarm)
+                    refreshUpcomingLiveActivity()
                 }
+            }
+            .alert("Delete quick alarm?", isPresented: isShowingQuickAlarmDeleteAlert) {
+                Button("Cancel", role: .cancel) {
+                    quickAlarmDeleteCandidate = nil
+                }
+                Button("Delete", role: .destructive) {
+                    if let alarm = quickAlarmDeleteCandidate {
+                        alarmStore.delete(alarm)
+                        refreshUpcomingLiveActivity()
+                    }
+                    quickAlarmDeleteCandidate = nil
+                }
+            } message: {
+                Text("Quick alarms cannot be edited. Delete this quick alarm instead?")
             }
             .fullScreenCover(item: $ringingAlarm) { alarm in
                 AlarmRingingView(
@@ -102,6 +233,20 @@ struct ContentView: View {
                     }
                 )
             }
+            .fullScreenCover(item: $previewAlarm) { alarm in
+                AlarmRingingView(
+                    alarm: alarm,
+                    isPreview: true,
+                    onDismiss: {
+                        dismissPreviewAlarm()
+                    },
+                    remainingSnoozes: .none,
+                    onSnooze: {
+                        dismissPreviewAlarm()
+                    }
+                )
+                .interactiveDismissDisabled(true)
+            }
             .fullScreenCover(item: $snoozeState) { state in
                 SnoozeIdleView(state: state) {
                     dismissSnooze(for: state.alarm)
@@ -110,6 +255,9 @@ struct ContentView: View {
             }
             .onAppear {
                 restoreActiveAlarmState()
+                if ringingAlarm == nil, snoozeState == nil {
+                    refreshUpcomingLiveActivity()
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }
@@ -123,6 +271,10 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .backgroundAlarmFired)) { notification in
                 if let alarm = notification.object as? Alarm {
+                    if showPendingSnoozeIfNeeded(for: alarm) {
+                        backgroundEngine.stopAlarmAndRearm(alarms: alarmStore.alarms)
+                        return
+                    }
                     cancelSnoozeState(for: alarm)
                     presentRingingAlarm(alarm)
                 } else {
@@ -138,6 +290,17 @@ struct ContentView: View {
             .filter(\.isEnabled)
             .sorted { ($0.nextFireDate ?? .distantFuture) < ($1.nextFireDate ?? .distantFuture) }
             .first
+    }
+
+    private var isShowingQuickAlarmDeleteAlert: Binding<Bool> {
+        Binding(
+            get: { quickAlarmDeleteCandidate != nil },
+            set: { isPresented in
+                if !isPresented {
+                    quickAlarmDeleteCandidate = nil
+                }
+            }
+        )
     }
 
     private func remainingSnoozes(for alarm: Alarm) -> SnoozeRemaining {
@@ -165,6 +328,7 @@ struct ContentView: View {
         VibrationManager.shared.stop()
         clearRingingAlarm()
         ringingAlarm = nil
+        backgroundEngine.stopAlarmAndRearm(alarms: alarmStore.alarms)
 
         let fireDate = Date().addingTimeInterval(alarm.snoozeInterval.duration)
         let state = SnoozeState(
@@ -252,6 +416,7 @@ struct ContentView: View {
         guard let state = pendingSnoozeState(for: alarm), state.fireDate > .now else { return false }
         activeSnooze = ActiveSnooze(alarmID: alarm.id, remaining: state.remainingSnoozes)
         ringingAlarm = nil
+        clearRingingAlarm()
         snoozeState = state
         scheduleSnoozeTask(for: state)
         return true
@@ -259,16 +424,23 @@ struct ContentView: View {
 
     private func dismissSnooze(for alarm: Alarm) {
         cancelSnoozeState(for: alarm)
-        if alarm.weekdays.isEmpty {
+        NotificationScheduler.shared.clearDeliveredAlarm(for: alarm)
+        if alarm.isQuickAlarm {
+            alarmStore.delete(alarm)
+        } else if alarm.weekdays.isEmpty {
             alarmStore.toggle(alarm, isEnabled: false)
         }
         backgroundEngine.stopAlarmAndRearm(alarms: alarmStore.alarms)
+        refreshUpcomingLiveActivity()
         showDismissGreeting(after: 300_000_000)
     }
 
     private func presentRingingAlarm(_ alarm: Alarm) {
         AlarmRuntimeStore.setRingingAlarm(alarm.id)
         WakeHardLiveActivityManager.startRinging(alarm: alarm)
+        if alarm.skippedFireDate != nil {
+            alarmStore.clearSkip(for: alarm)
+        }
         ringingAlarm = alarm
     }
 
@@ -307,8 +479,10 @@ struct ContentView: View {
     }
 
     private func restoreActiveAlarmState() {
+        if restoreSnoozeIfNeeded() {
+            return
+        }
         restoreRingingIfNeeded()
-        restoreSnoozeIfNeeded()
     }
 
     private func restoreRingingIfNeeded() {
@@ -323,21 +497,24 @@ struct ContentView: View {
         ringingAlarm = alarm
     }
 
-    private func restoreSnoozeIfNeeded() {
-        guard snoozeState == nil, ringingAlarm == nil else { return }
+    @discardableResult
+    private func restoreSnoozeIfNeeded() -> Bool {
+        guard snoozeState == nil else { return true }
         guard
             let persisted = AlarmRuntimeStore.activeSnooze(),
             let alarm = alarmStore.alarms.first(where: { $0.id == persisted.alarmID })
         else {
             clearPersistedSnooze()
-            return
+            return false
         }
 
         activeSnooze = ActiveSnooze(alarmID: alarm.id, remaining: persisted.remainingSnoozes)
+        clearRingingAlarm()
+        ringingAlarm = nil
 
         if persisted.fireDate <= .now {
             ringAfterSnooze(for: alarm, clearNotification: false)
-            return
+            return true
         }
 
         let state = SnoozeState(
@@ -357,21 +534,32 @@ struct ContentView: View {
             remainingSnoozes: persisted.remainingSnoozes
         )
         scheduleSnoozeTask(for: state)
+        return true
     }
 
     private func dismissRingingAlarm(_ alarm: Alarm) {
         cancelSnoozeState(for: alarm)
         NotificationScheduler.shared.cancelSnooze(for: alarm)
+        NotificationScheduler.shared.clearDeliveredAlarm(for: alarm)
         ringingAlarm = nil
         clearRingingAlarm()
         soundManager.stop()
         VibrationManager.shared.stop()
         Task { await WakeHardLiveActivityManager.endSnooze() }
-        if alarm.weekdays.isEmpty {
+        if alarm.isQuickAlarm {
+            alarmStore.delete(alarm)
+        } else if alarm.weekdays.isEmpty {
             alarmStore.toggle(alarm, isEnabled: false)
         }
         backgroundEngine.stopAlarmAndRearm(alarms: alarmStore.alarms)
+        refreshUpcomingLiveActivity()
         showDismissGreeting(after: 300_000_000)
+    }
+
+    private func dismissPreviewAlarm() {
+        previewAlarm = nil
+        soundManager.stop()
+        VibrationManager.shared.stop()
     }
 
     private func showAlarmSavedToast(for alarm: Alarm) {
@@ -386,6 +574,32 @@ struct ContentView: View {
                 saveToast = nil
             }
         }
+    }
+
+    private func handleAlarmToggle(_ alarm: Alarm, isEnabled: Bool) {
+        if isEnabled {
+            alarmStore.toggle(alarm, isEnabled: true)
+            refreshUpcomingLiveActivity()
+            if skipPrompt?.alarm.id == alarm.id {
+                skipPrompt = nil
+            }
+            return
+        }
+
+        if alarm.isQuickAlarm {
+            quickAlarmDeleteCandidate = alarm
+            return
+        }
+
+        alarmStore.toggle(alarm, isEnabled: false)
+        refreshUpcomingLiveActivity()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+            skipPrompt = SkipOncePrompt(alarm: alarm)
+        }
+    }
+
+    private func refreshUpcomingLiveActivity() {
+        WakeHardLiveActivityManager.showUpcomingAlarm(from: alarmStore.alarms)
     }
 
     private func savedToastMessage(for alarm: Alarm) -> String {
@@ -440,9 +654,383 @@ private struct AlarmSaveToast: Identifiable, Equatable {
     let message: String
 }
 
+private struct SkipOncePrompt: Identifiable, Equatable {
+    let id = UUID()
+    let alarm: Alarm
+}
+
 private struct DismissGreeting: Identifiable, Equatable {
     let id = UUID()
     let message: String
+}
+
+private struct SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(AppSettings.Keys.liveActivityRinging) private var liveActivityRinging = true
+    @AppStorage(AppSettings.Keys.liveActivitySnooze) private var liveActivitySnooze = true
+    @AppStorage(AppSettings.Keys.liveActivitySkippedOnce) private var liveActivitySkippedOnce = true
+    @AppStorage(AppSettings.Keys.liveActivityNextAlarm) private var liveActivityNextAlarm = true
+    @AppStorage(AppSettings.Keys.failSafeBackupSound) private var failSafeBackupSound = true
+    let onChange: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.background.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 16) {
+                        SettingsSection(title: "Live Activities") {
+                            SettingsToggleRow(
+                                title: "Ringing",
+                                subtitle: "Show the alarm state on the Lock Screen and Dynamic Island while it rings.",
+                                isOn: $liveActivityRinging
+                            )
+                            SettingsToggleRow(
+                                title: "Snooze countdown",
+                                subtitle: "Show the time remaining until snooze rings again.",
+                                isOn: $liveActivitySnooze
+                            )
+                            SettingsToggleRow(
+                                title: "Skip once",
+                                subtitle: "Show when an alarm has skipped its next ring.",
+                                isOn: $liveActivitySkippedOnce
+                            )
+                            SettingsToggleRow(
+                                title: "Next alarm countdown",
+                                subtitle: "Keep a live countdown for the next scheduled alarm.",
+                                isOn: $liveActivityNextAlarm
+                            )
+                        }
+
+                        SettingsSection(title: "Audio Safety") {
+                            SettingsToggleRow(
+                                title: "Fail-safe backup sound",
+                                subtitle: "Attach a backup tone to alarm notifications if app audio cannot run.",
+                                isOn: $failSafeBackupSound
+                            )
+                        }
+                    }
+                    .padding(16)
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .onChange(of: liveActivityRinging) { _, _ in onChange() }
+            .onChange(of: liveActivitySnooze) { _, _ in onChange() }
+            .onChange(of: liveActivitySkippedOnce) { _, _ in onChange() }
+            .onChange(of: liveActivityNextAlarm) { _, _ in onChange() }
+            .onChange(of: failSafeBackupSound) { _, _ in onChange() }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+private struct SettingsSection<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AppTheme.muted)
+                .textCase(.uppercase)
+            content
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.panel)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(AppTheme.border, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct SettingsToggleRow: View {
+    let title: String
+    let subtitle: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppTheme.primary)
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppTheme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .tint(AppTheme.accent)
+    }
+}
+
+private struct FloatingAddMenuView: View {
+    @Binding var isOpen: Bool
+    let onQuickAlarm: () -> Void
+    let onAlarm: () -> Void
+
+    var body: some View {
+        ZStack {
+            if isOpen {
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                            isOpen = false
+                        }
+                    }
+            }
+
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 14) {
+                        if isOpen {
+                            VStack(spacing: 10) {
+                                menuButton(title: "Quick alarm", systemImage: "bolt.fill", action: onQuickAlarm)
+                                menuButton(title: "Alarm", systemImage: "alarm.fill", action: onAlarm)
+                            }
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+
+                        Button {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                                isOpen.toggle()
+                            }
+                        } label: {
+                            Image(systemName: isOpen ? "xmark" : "plus")
+                                .font(.system(size: 34, weight: .medium))
+                                .foregroundStyle(.black)
+                                .frame(width: 78, height: 78)
+                                .background(AppTheme.accent)
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 12)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(isOpen ? "Close add menu" : "Add")
+                    }
+                    .padding(.trailing, 24)
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+    }
+
+    private func menuButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(width: 26)
+                Text(title)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.background)
+            }
+            .padding(.horizontal, 20)
+            .frame(height: 58)
+            .background(AppTheme.primary)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: .black.opacity(0.22), radius: 16, x: 0, y: 8)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct QuickAlarmEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var durationMinutes = 5
+    @State private var sound: AlarmSound = .pulse
+    @State private var volume = 0.85
+    @State private var vibrateEnabled = true
+    let onSave: (Alarm) -> Void
+
+    private let presets = [1, 5, 10, 15, 30, 60]
+
+    var body: some View {
+        ZStack {
+            AppTheme.background.ignoresSafeArea()
+            VStack(spacing: 28) {
+                HStack {
+                    Spacer()
+                    Text("Quick alarm")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(AppTheme.primary)
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(AppTheme.primary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                VStack(spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text("+")
+                            .font(.system(size: 42, weight: .medium))
+                            .foregroundStyle(AppTheme.primary)
+                        Text("\(durationMinutes)")
+                            .font(.system(size: 74, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppTheme.primary)
+                        Text(durationMinutes == 1 ? "min" : "min")
+                            .font(.system(size: 42, weight: .semibold))
+                            .foregroundStyle(AppTheme.primary)
+                    }
+                    Text("Ring at \(ringTimeText)")
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundStyle(AppTheme.secondary)
+                }
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+                    ForEach(presets, id: \.self) { minutes in
+                        Button {
+                            durationMinutes = minutes
+                        } label: {
+                            Text(presetTitle(minutes))
+                                .font(.system(size: 24, weight: .medium))
+                                .foregroundStyle(AppTheme.primary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 74)
+                                .background(durationMinutes == minutes ? AppTheme.accent.opacity(0.32) : AppTheme.panelSecondary)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                VStack(spacing: 16) {
+                    Picker("Sound", selection: $sound) {
+                        ForEach(AlarmSound.allCases) { alarmSound in
+                            Text(alarmSound.title).tag(alarmSound)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    HStack(spacing: 14) {
+                        Image(systemName: "speaker.fill")
+                            .foregroundStyle(AppTheme.primary)
+                        Slider(value: $volume, in: 0.1...1)
+                            .tint(AppTheme.accent)
+                    }
+
+                    Toggle("Vibrate", isOn: $vibrateEnabled)
+                        .tint(AppTheme.accent)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(AppTheme.primary)
+                }
+
+                Button {
+                    onSave(makeAlarm())
+                    dismiss()
+                } label: {
+                    Text("Save")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 58)
+                        .background(AppTheme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
+            }
+            .padding(24)
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var ringDate: Date {
+        Date().addingTimeInterval(TimeInterval(durationMinutes * 60))
+    }
+
+    private var ringTimeText: String {
+        ringDate.formatted(date: .omitted, time: .shortened)
+    }
+
+    private func presetTitle(_ minutes: Int) -> String {
+        minutes >= 60 ? "\(minutes / 60) hour" : "\(minutes) min"
+    }
+
+    private func makeAlarm() -> Alarm {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: ringDate)
+        return Alarm(
+            label: "Quick alarm",
+            hour: components.hour ?? 7,
+            minute: components.minute ?? 0,
+            weekdays: [],
+            sound: sound,
+            volume: volume,
+            vibrateEnabled: vibrateEnabled,
+            isQuickAlarm: true,
+            snoozeEnabled: false
+        )
+    }
+}
+
+private struct SkipOnceToastView: View {
+    let title: String
+    let onSkipOnce: () -> Void
+    let onTurnOff: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Button(action: onSkipOnce) {
+                HStack(spacing: 12) {
+                    Image(systemName: "alarm.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+
+                    Text(title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppTheme.primary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button(action: onTurnOff) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppTheme.secondary)
+                    .frame(width: 42, height: 42)
+                    .background(AppTheme.background.opacity(0.72))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Turn alarm off")
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 8)
+        .frame(minHeight: 58)
+        .background(AppTheme.panelSecondary)
+        .overlay(
+            Capsule()
+                .stroke(AppTheme.border, lineWidth: 1)
+        )
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 10)
+    }
 }
 
 private struct AlarmSaveToastView: View {
@@ -533,7 +1121,7 @@ private struct HeaderView: View {
 
                     Spacer(minLength: 8)
 
-                    if nextAlarm != nil {
+                    if canOpenAlarm {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(AppTheme.secondary)
@@ -544,7 +1132,7 @@ private struct HeaderView: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(nextAlarm == nil)
+        .disabled(!canOpenAlarm)
         .padding(18)
         .background(AppTheme.panel)
         .overlay(
@@ -554,6 +1142,10 @@ private struct HeaderView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .padding(.horizontal, 16)
         .padding(.top, 10)
+    }
+
+    private var canOpenAlarm: Bool {
+        nextAlarm?.isQuickAlarm == false
     }
 
     private func countdownText(at date: Date) -> String {
@@ -573,65 +1165,150 @@ private struct HeaderView: View {
 }
 
 private struct AlarmRow: View {
-    @EnvironmentObject private var alarmStore: AlarmStore
     let alarm: Alarm
+    let isShowingSkipPrompt: Bool
+    let onToggle: (Bool) -> Void
+    let onSkipOnce: () -> Void
+    let onTurnOff: () -> Void
+    let onDelete: () -> Void
+    let onPreview: () -> Void
+    let onDuplicate: () -> Void
+    let onEdit: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(alignment: .firstTextBaseline, spacing: 9) {
-                    Text(alarm.formattedTime)
-                        .font(.system(size: 30, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(alarm.isEnabled ? AppTheme.primary : AppTheme.disabled)
-                    Text(alarm.label)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AppTheme.muted)
-                        .lineLimit(1)
+        VStack(alignment: .leading, spacing: 15) {
+            HStack(alignment: .top) {
+                if alarm.isQuickAlarm {
+                    Spacer(minLength: 0)
+                } else {
+                    weekdayStrip
                 }
-
-                HStack(spacing: 10) {
-                    Label(alarm.repeatSummary, systemImage: "repeat")
-                    Label(alarm.soundTitle, systemImage: "speaker.wave.2")
-                    Label("\(Int(alarm.volume * 100))%", systemImage: "slider.horizontal.3")
-                    if alarm.vibrateEnabled {
-                        Label(alarm.vibrationPattern.title, systemImage: "iphone.radiowaves.left.and.right")
-                    }
-                }
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppTheme.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { isVisuallyOn },
+                    set: { onToggle($0) }
+                ))
+                .labelsHidden()
+                .tint(AppTheme.accent)
             }
 
-            Spacer()
+            Text(alarm.formattedTime)
+                .font(.system(size: 48, weight: .medium, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(isVisuallyOn ? AppTheme.primary : AppTheme.disabled)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
 
-            Toggle("", isOn: Binding(
-                get: { alarm.isEnabled },
-                set: { alarmStore.toggle(alarm, isEnabled: $0) }
-            ))
-            .labelsHidden()
-            .tint(AppTheme.accent)
+            if isShowingSkipPrompt {
+                SkipOnceToastView(
+                    title: "Tap to skip once",
+                    onSkipOnce: onSkipOnce,
+                    onTurnOff: onTurnOff
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            } else if let skippedMessage {
+                Text(skippedMessage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.primary.opacity(0.86))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+
+            HStack(spacing: 12) {
+                if alarm.isQuickAlarm {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundStyle(AppTheme.accent)
+                    Text("Quick alarm")
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(isVisuallyOn ? AppTheme.primary : AppTheme.disabled)
+                } else if !alarm.label.isEmpty {
+                    Text(alarm.label)
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(isVisuallyOn ? AppTheme.primary : AppTheme.disabled)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                }
+
+                Spacer()
+
+                if !alarm.isQuickAlarm {
+                    ZStack {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(AppTheme.secondary)
+                            .rotationEffect(.degrees(90))
+                            .frame(width: 34, height: 34)
+
+                        Menu {
+                            Button(role: .destructive, action: onDelete) {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            Button(action: onPreview) {
+                                Label("Preview alarm", systemImage: "eye")
+                            }
+                            Button(action: onSkipOnce) {
+                                Label("Skip once", systemImage: "repeat")
+                            }
+                            Button(action: onDuplicate) {
+                                Label("Duplicate alarm", systemImage: "square.on.square")
+                            }
+                        } label: {
+                            Color.clear
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Alarm options")
+                    }
+                }
+            }
         }
-        .padding(15)
-        .frame(minHeight: 86)
+        .padding(20)
+        .frame(minHeight: 150)
         .background(AppTheme.panel)
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(AppTheme.border, lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !alarm.isQuickAlarm else { return }
+            onEdit()
+        }
+    }
+
+    private var isVisuallyOn: Bool {
+        alarm.isEnabled && alarm.skippedFireDate == nil
+    }
+
+    private var skippedMessage: String? {
+        guard alarm.skippedFireDate != nil, let nextFireDate = alarm.nextFireDate else { return nil }
+        let weekday = nextFireDate.formatted(.dateTime.weekday(.wide))
+        return "Alarm rings on \(weekday)"
+    }
+
+    private var weekdayStrip: some View {
+        HStack(spacing: 20) {
+            ForEach(Weekday.allCases) { weekday in
+                Text(weekday.singleLetter)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(alarm.weekdays.contains(weekday) ? AppTheme.accent : AppTheme.secondary.opacity(0.64))
+            }
+        }
     }
 }
 
 private struct AlarmRingingView: View {
     @EnvironmentObject private var soundManager: SoundManager
     let alarm: Alarm
+    var isPreview = false
     let onDismiss: () -> Void
     let remainingSnoozes: SnoozeRemaining
     let onSnooze: () -> Void
-    @State private var holdProgress = 0.0
     @State private var tapCount = 0
+    @State private var completedAction = false
 
     var body: some View {
         ZStack {
@@ -658,6 +1335,7 @@ private struct AlarmRingingView: View {
                 // Snooze button
                 if alarm.snoozeEnabled, remainingSnoozes.canSnooze {
                     Button {
+                        completedAction = true
                         onSnooze()
                     } label: {
                         HStack {
@@ -672,6 +1350,12 @@ private struct AlarmRingingView: View {
             .padding(24)
         }
         .onAppear {
+            if isPreview {
+                soundManager.play(alarm: alarm, loops: true)
+                VibrationManager.shared.start(alarm: alarm)
+                return
+            }
+
             // Let BackgroundAlarmEngine own playback continuously from the
             // moment the alarm fires through dismiss/snooze. Calling fire()
             // here is idempotent — it does nothing if the engine is already
@@ -680,29 +1364,35 @@ private struct AlarmRingingView: View {
             BackgroundAlarmEngine.shared.fire(alarm: alarm)
             VibrationManager.shared.start(alarm: alarm)
         }
+        .onDisappear {
+            guard !isPreview, !completedAction else { return }
+            BackgroundAlarmEngine.shared.fire(alarm: alarm)
+        }
     }
 
     @ViewBuilder
     private var challengeControl: some View {
         switch alarm.challenge {
         case .none:
-            Button("Dismiss", action: onDismiss)
+            Button {
+                completedAction = true
+                onDismiss()
+            } label: {
+                Text("Dismiss")
+            }
                 .buttonStyle(PrimaryButtonStyle())
         case .tapHold:
-            Button {
-                holdProgress += 0.34
-                if holdProgress >= 1 { onDismiss() }
-            } label: {
-                HStack {
-                    Image(systemName: "hand.tap.fill")
-                    Text(holdProgress >= 0.67 ? "One more tap" : "Tap three times")
-                }
+            HoldToDismissButton {
+                completedAction = true
+                onDismiss()
             }
-            .buttonStyle(PrimaryButtonStyle())
         case .focusTaps:
             Button {
                 tapCount += 1
-                if tapCount >= 12 { onDismiss() }
+                if tapCount >= 12 {
+                    completedAction = true
+                    onDismiss()
+                }
             } label: {
                 HStack {
                     Image(systemName: "target")
@@ -711,6 +1401,35 @@ private struct AlarmRingingView: View {
             }
             .buttonStyle(PrimaryButtonStyle())
         }
+    }
+}
+
+private struct HoldToDismissButton: View {
+    @State private var isPressing = false
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack {
+            Image(systemName: "hand.raised.fill")
+            Text(isPressing ? "Keep holding" : "Hold to dismiss")
+        }
+        .font(.system(size: 17, weight: .semibold))
+        .foregroundStyle(.black)
+        .frame(maxWidth: .infinity)
+        .frame(height: 54)
+        .background(isPressing ? AppTheme.accent.opacity(0.78) : AppTheme.accent)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .contentShape(Rectangle())
+        .onLongPressGesture(
+            minimumDuration: 1.4,
+            maximumDistance: 48,
+            perform: onDismiss,
+            onPressingChanged: { pressing in
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    isPressing = pressing
+                }
+            }
+        )
     }
 }
 

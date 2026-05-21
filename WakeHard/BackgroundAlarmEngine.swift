@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFAudio
 import Foundation
 import MediaPlayer
 import UIKit
@@ -15,17 +15,25 @@ final class BackgroundAlarmEngine: ObservableObject {
     private let musicPlayer = MPMusicPlayerController.applicationMusicPlayer
     private var timer: DispatchSourceTimer?
     private var alarmLoopTimer: DispatchSourceTimer?
-    private var volumeRampTimer: DispatchSourceTimer?
+    private var volumeRampTask: Task<Void, Never>?
+    private var keepAliveWatchdogTimer: DispatchSourceTimer?
     private var armedAlarm: Alarm?
     // Set when the engine is actively ringing an alarm (between fire() and
     // stopAlarmAndRearm()). Lets fire() be idempotent so AlarmRingingView
     // can call it safely, and lets the background/interruption handlers
     // know whether they should restart playback or just keep the session warm.
     private var currentlyRingingAlarm: Alarm?
+    private var activeAlarmPlayback: ActiveAlarmPlayback?
+    private var musicStartToken: UUID?
     private let volumeView = MPVolumeView(frame: .zero)
 
+    private enum ActiveAlarmPlayback {
+        case audio
+        case music
+    }
+
     private init() {
-        configureAudioSession()
+        configureKeepAliveAudioSession()
         attachVolumeViewIfNeeded()
         observeLifecycle()
     }
@@ -43,6 +51,8 @@ final class BackgroundAlarmEngine: ObservableObject {
             .sorted(by: { $0.1 < $1.1 })
             .first
         else {
+            keepAliveWatchdogTimer?.cancel()
+            keepAliveWatchdogTimer = nil
             stopSilentLoop()
             armedAlarm = nil
             armedUntil = nil
@@ -53,8 +63,9 @@ final class BackgroundAlarmEngine: ObservableObject {
         armedAlarm = next.0
         armedUntil = next.1
         isArmed = true
-        configureAudioSession()
+        configureKeepAliveAudioSession()
         startSilentLoop()
+        startKeepAliveWatchdog()
         scheduleTimer(for: next.1)
     }
 
@@ -63,20 +74,28 @@ final class BackgroundAlarmEngine: ObservableObject {
         // engine is playing, and the interruption/foreground handlers call
         // it to resume. If we're already ringing this same alarm and the
         // player is actively producing audio, there's nothing to do.
-        if currentlyRingingAlarm?.id == alarm.id, alarmPlayer?.isPlaying == true {
+        if currentlyRingingAlarm?.id == alarm.id, isAlarmAudioPlaying {
+            AlarmNowPlayingInfo.refresh()
             return
         }
         currentlyRingingAlarm = alarm
         // Tear down any half-state from a previous fire so we start clean.
         alarmLoopTimer?.cancel()
         alarmLoopTimer = nil
-        volumeRampTimer?.cancel()
-        volumeRampTimer = nil
+        volumeRampTask?.cancel()
+        volumeRampTask = nil
         alarmPlayer?.stop()
         alarmPlayer = nil
+        musicStartToken = nil
+        if activeAlarmPlayback == .music {
+            musicPlayer.stop()
+        }
+        activeAlarmPlayback = nil
 
         stopSilentLoop()
-        configureAudioSession()
+        keepAliveWatchdogTimer?.cancel()
+        keepAliveWatchdogTimer = nil
+        configureAlarmAudioSession()
         AlarmRuntimeStore.setRingingAlarm(alarm.id)
         WakeHardLiveActivityManager.startRinging(alarm: alarm)
         let targetVolume = Float(alarm.volume)
@@ -91,6 +110,21 @@ final class BackgroundAlarmEngine: ObservableObject {
             return
         }
 
+        if playMediaLibrarySongIfNeeded(for: alarm, fallbackVolume: targetVolume) {
+            VibrationManager.shared.start(alarm: alarm)
+            NotificationCenter.default.post(name: .backgroundAlarmFired, object: alarm)
+            return
+        }
+
+        if alarm.hasSelectedSong {
+            if AppSettings.failSafeBackupSound {
+                playBackupSound(for: alarm, volume: targetVolume)
+            }
+            VibrationManager.shared.start(alarm: alarm)
+            NotificationCenter.default.post(name: .backgroundAlarmFired, object: alarm)
+            return
+        }
+
         guard let url = Bundle.main.url(forResource: alarm.sound.fileName, withExtension: nil) else { return }
         do {
             let player = try AVAudioPlayer(contentsOf: url)
@@ -98,11 +132,12 @@ final class BackgroundAlarmEngine: ObservableObject {
             player.volume = gentleWakeDuration > 0 ? 0 : targetVolume
             player.numberOfLoops = -1
             player.prepareToPlay()
+            alarmPlayer = player
+            activeAlarmPlayback = .audio
             player.play()
             if gentleWakeDuration > 0 {
-                player.setVolume(targetVolume, fadeDuration: gentleWakeDuration)
+                startAudioPlayerVolumeRamp(to: targetVolume, duration: gentleWakeDuration)
             }
-            alarmPlayer = player
             VibrationManager.shared.start(alarm: alarm)
             NotificationCenter.default.post(name: .backgroundAlarmFired, object: alarm)
         } catch {
@@ -113,11 +148,13 @@ final class BackgroundAlarmEngine: ObservableObject {
     func stopAlarmAndRearm(alarms: [Alarm]) {
         alarmLoopTimer?.cancel()
         alarmLoopTimer = nil
-        volumeRampTimer?.cancel()
-        volumeRampTimer = nil
+        volumeRampTask?.cancel()
+        volumeRampTask = nil
         alarmPlayer?.stop()
         alarmPlayer = nil
         musicPlayer.stop()
+        musicStartToken = nil
+        activeAlarmPlayback = nil
         VibrationManager.shared.stop()
         // Clear ringing flag so background/interruption handlers stop trying
         // to resume the alarm audio.
@@ -131,24 +168,36 @@ final class BackgroundAlarmEngine: ObservableObject {
     func stopPreviewOrAlarm() {
         alarmLoopTimer?.cancel()
         alarmLoopTimer = nil
-        volumeRampTimer?.cancel()
-        volumeRampTimer = nil
+        volumeRampTask?.cancel()
+        volumeRampTask = nil
         alarmPlayer?.stop()
         alarmPlayer = nil
         musicPlayer.stop()
+        musicStartToken = nil
+        activeAlarmPlayback = nil
         VibrationManager.shared.stop()
     }
 
-    private func configureAudioSession() {
+    private func configureKeepAliveAudioSession() {
+        configureAudioSession(options: [.mixWithOthers])
+    }
+
+    private func configureAlarmAudioSession() {
+        configureAudioSession(options: [])
+    }
+
+    private func configureAudioSession(options: AVAudioSession.CategoryOptions) {
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
-            try AVAudioSession.sharedInstance().setActive(true)
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, options: options)
+            try session.setActive(true)
         } catch {
             print("Audio session setup failed: \(error)")
         }
     }
 
     private func startSilentLoop() {
+        configureKeepAliveAudioSession()
         if silentPlayer?.isPlaying == true { return }
         guard let url = Bundle.main.url(forResource: "keepalive.wav", withExtension: nil) else { return }
 
@@ -169,6 +218,43 @@ final class BackgroundAlarmEngine: ObservableObject {
         silentPlayer = nil
     }
 
+    private func startKeepAliveWatchdog() {
+        keepAliveWatchdogTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 30, repeating: 30)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                guard self.isArmed, self.currentlyRingingAlarm == nil else { return }
+                if
+                    let armedUntil = self.armedUntil,
+                    armedUntil <= .now,
+                    let alarm = self.armedAlarm
+                {
+                    self.fire(alarm: alarm)
+                    return
+                }
+                self.configureKeepAliveAudioSession()
+                if self.silentPlayer?.isPlaying != true {
+                    self.startSilentLoop()
+                }
+            }
+        }
+        timer.resume()
+        keepAliveWatchdogTimer = timer
+    }
+
+    private var isAlarmAudioPlaying: Bool {
+        switch activeAlarmPlayback {
+        case .audio:
+            return alarmPlayer?.isPlaying == true
+        case .music:
+            return musicPlayer.playbackState == .playing
+        case .none:
+            return false
+        }
+    }
+
     private func scheduleTimer(for date: Date) {
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + max(0, date.timeIntervalSinceNow))
@@ -187,15 +273,8 @@ final class BackgroundAlarmEngine: ObservableObject {
             let urlString = alarm.songAssetURLString,
             let url = URL(string: urlString)
         else {
-            // No usable asset URL means the song is either cloud-only or
-            // DRM-protected. We deliberately do NOT fall back to
-            // `MPMusicPlayerController.applicationMusicPlayer` here:
-            // that controller publishes the song's album artwork to the
-            // system Now Playing widget, which iOS shows in the Dynamic
-            // Island over our Live Activity. We can't override that from
-            // user-space, so falling back to the built-in tone (our
-            // Live Activity's green alarm icon stays visible) is the
-            // right behavior.
+            // No direct asset URL; try the media-library player next. Downloaded
+            // Apple Music tracks often land there even when `assetURL` is nil.
             return false
         }
 
@@ -207,11 +286,12 @@ final class BackgroundAlarmEngine: ObservableObject {
             player.currentTime = min(alarm.effectivePlaybackStartTime, max(0, player.duration - 0.5))
             player.numberOfLoops = alarm.hasClipLoop ? 0 : -1
             player.prepareToPlay()
+            alarmPlayer = player
+            activeAlarmPlayback = .audio
             player.play()
             if gentleWakeDuration > 0 {
-                player.setVolume(volume, fadeDuration: gentleWakeDuration)
+                startAudioPlayerVolumeRamp(to: volume, duration: gentleWakeDuration)
             }
-            alarmPlayer = player
             scheduleAudioLoopIfNeeded(alarm: alarm)
             // Replace whatever Now Playing info exists with our alarm icon so
             // the Dynamic Island shows the green alarm icon instead of album art.
@@ -223,8 +303,15 @@ final class BackgroundAlarmEngine: ObservableObject {
         }
     }
 
-    private func playMediaLibrarySongIfNeeded(for alarm: Alarm) -> Bool {
+    private func playMediaLibrarySongIfNeeded(for alarm: Alarm, fallbackVolume: Float) -> Bool {
         guard let persistentID = alarm.songPersistentID else { return false }
+        guard alarm.gentleWakeDuration == .off else {
+            // MPMusicPlayerController has no per-player volume. The old system
+            // volume ramp was unreliable and could jump to full volume, so use
+            // the backup AVAudioPlayer tone when gentle wake must be honored.
+            return false
+        }
+
         let query = MPMediaQuery.songs()
         let predicate = MPMediaPropertyPredicate(
             value: NSNumber(value: persistentID),
@@ -234,22 +321,21 @@ final class BackgroundAlarmEngine: ObservableObject {
 
         guard let item = query.items?.first else { return false }
         let targetVolume = Float(alarm.volume)
-        if alarm.gentleWakeDuration.duration > 0 {
-            startSystemVolumeRamp(to: targetVolume, duration: alarm.gentleWakeDuration.duration)
-        } else {
-            setSystemVolume(targetVolume)
-        }
+        setSystemVolume(targetVolume)
         musicPlayer.setQueue(with: MPMediaItemCollection(items: [item]))
         musicPlayer.repeatMode = alarm.hasClipLoop ? .none : .one
         let startTime = alarm.effectivePlaybackStartTime
+        let token = UUID()
+        musicStartToken = token
         musicPlayer.prepareToPlay { [weak self] _ in
             DispatchQueue.main.async {
-                guard let self else { return }
-                self.startAlarmMusicPlayback(at: startTime)
+                guard let self, self.musicStartToken == token else { return }
+                self.startAlarmMusicPlayback(at: startTime, token: token)
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-            self?.startAlarmMusicPlayback(at: startTime)
+            guard let self, self.musicStartToken == token else { return }
+            self.startAlarmMusicPlayback(at: startTime, token: token)
         }
         scheduleMusicLoopIfNeeded(alarm: alarm)
         // Override the system Now Playing info so the Dynamic Island shows
@@ -257,20 +343,63 @@ final class BackgroundAlarmEngine: ObservableObject {
         // The helper re-applies on every nowPlayingItemDidChangeNotification
         // so the music player can't clobber it back.
         AlarmNowPlayingInfo.startForAlarm(label: alarm.label)
+        activeAlarmPlayback = .music
+        scheduleMediaFallbackIfNeeded(for: alarm, token: token, volume: fallbackVolume)
         return true
     }
 
-    private func startAlarmMusicPlayback(at startTime: Double) {
+    private func scheduleMediaFallbackIfNeeded(for alarm: Alarm, token: UUID, volume: Float) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
+            guard
+                let self,
+                self.musicStartToken == token,
+                self.activeAlarmPlayback == .music,
+                self.musicPlayer.playbackState != .playing
+            else { return }
+            guard AppSettings.failSafeBackupSound else { return }
+
+            self.musicPlayer.stop()
+            self.musicStartToken = nil
+            self.activeAlarmPlayback = nil
+            self.playBackupSound(for: alarm, volume: volume)
+        }
+    }
+
+    private func playBackupSound(for alarm: Alarm, volume: Float) {
+        guard let url = Bundle.main.url(forResource: alarm.sound.fileName, withExtension: nil) else { return }
+        do {
+            let gentleWakeDuration = alarm.gentleWakeDuration.duration
+            let player = try AVAudioPlayer(contentsOf: url)
+            setSystemVolume(volume)
+            player.volume = gentleWakeDuration > 0 ? 0 : volume
+            player.numberOfLoops = -1
+            player.prepareToPlay()
+            alarmPlayer = player
+            activeAlarmPlayback = .audio
+            player.play()
+            if gentleWakeDuration > 0 {
+                startAudioPlayerVolumeRamp(to: volume, duration: gentleWakeDuration)
+            }
+            AlarmNowPlayingInfo.startForAlarm(label: alarm.label)
+        } catch {
+            print("Unable to play backup alarm sound: \(error)")
+        }
+    }
+
+    private func startAlarmMusicPlayback(at startTime: Double, token: UUID) {
+        guard musicStartToken == token, activeAlarmPlayback == .music else { return }
         musicPlayer.currentPlaybackTime = startTime
         musicPlayer.play()
+        AlarmNowPlayingInfo.refresh()
 
         for delay in [0.12, 0.35, 0.75] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                guard let self else { return }
+                guard let self, self.musicStartToken == token, self.activeAlarmPlayback == .music else { return }
                 if abs(self.musicPlayer.currentPlaybackTime - startTime) > 1.25 {
                     self.musicPlayer.currentPlaybackTime = startTime
                     self.musicPlayer.play()
                 }
+                AlarmNowPlayingInfo.refresh()
             }
         }
     }
@@ -315,32 +444,37 @@ final class BackgroundAlarmEngine: ObservableObject {
         }
     }
 
-    private func startSystemVolumeRamp(to targetVolume: Float, duration: TimeInterval) {
-        volumeRampTimer?.cancel()
-        volumeRampTimer = nil
+    private func startAudioPlayerVolumeRamp(to targetVolume: Float, duration: TimeInterval) {
+        volumeRampTask?.cancel()
+        volumeRampTask = nil
+
+        guard let player = alarmPlayer else { return }
+
         guard duration > 0 else {
-            setSystemVolume(targetVolume)
+            player.volume = targetVolume
             return
         }
 
-        setSystemVolume(0)
+        player.volume = 0
         let startedAt = Date()
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: 0.25)
-        timer.setEventHandler { [weak self] in
-            guard let self else {
-                timer.cancel()
-                return
+        volumeRampTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            while !Task.isCancelled {
+                guard self.activeAlarmPlayback == .audio else { return }
+
+                let progress = min(1, Date().timeIntervalSince(startedAt) / duration)
+                self.alarmPlayer?.volume = targetVolume * Float(progress)
+
+                guard progress < 1 else { break }
+                try? await Task.sleep(nanoseconds: 250_000_000)
             }
-            let progress = min(1, Date().timeIntervalSince(startedAt) / duration)
-            self.setSystemVolume(targetVolume * Float(progress))
-            if progress >= 1 {
-                timer.cancel()
-                self.volumeRampTimer = nil
+
+            if !Task.isCancelled {
+                self.alarmPlayer?.volume = targetVolume
+                self.volumeRampTask = nil
             }
         }
-        timer.resume()
-        volumeRampTimer = timer
     }
 
     private func attachVolumeViewIfNeeded() {
@@ -362,13 +496,15 @@ final class BackgroundAlarmEngine: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                self.configureAudioSession()
                 if self.currentlyRingingAlarm != nil {
-                    // An alarm is actively ringing — alarmPlayer is producing
+                    // An alarm is actively ringing; its player is producing
                     // audio. Don't start the silent keep-alive loop; it would
                     // contend with the alarm player for the audio session.
+                    self.configureAlarmAudioSession()
+                    AlarmNowPlayingInfo.refresh()
                     return
                 }
+                self.configureKeepAliveAudioSession()
                 if self.isArmed { self.startSilentLoop() }
             }
         }
@@ -384,8 +520,10 @@ final class BackgroundAlarmEngine: ObservableObject {
                 // (iOS sometimes pauses background audio across app switches
                 // even with the audio background mode), restart it. fire()
                 // is idempotent so this is safe.
-                self.configureAudioSession()
-                if self.alarmPlayer?.isPlaying != true {
+                self.configureAlarmAudioSession()
+                if self.isAlarmAudioPlaying {
+                    AlarmNowPlayingInfo.refresh()
+                } else {
                     self.fire(alarm: alarm)
                 }
             }
@@ -399,15 +537,35 @@ final class BackgroundAlarmEngine: ObservableObject {
             guard
                 let userInfo = notification.userInfo,
                 let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
-                AVAudioSession.InterruptionType(rawValue: typeValue) == .ended
+                let interruptionType = AVAudioSession.InterruptionType(rawValue: typeValue)
             else { return }
 
             Task { @MainActor in
                 guard let self else { return }
-                self.configureAudioSession()
+                if interruptionType == .began {
+                    guard self.currentlyRingingAlarm == nil, self.isArmed else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                        Task { @MainActor in
+                            guard let self, self.currentlyRingingAlarm == nil, self.isArmed else { return }
+                            self.configureKeepAliveAudioSession()
+                            if self.silentPlayer?.isPlaying != true {
+                                self.startSilentLoop()
+                            }
+                        }
+                    }
+                    return
+                }
+
+                guard interruptionType == .ended else { return }
+                self.configureKeepAliveAudioSession()
                 if let alarm = self.currentlyRingingAlarm {
+                    self.configureAlarmAudioSession()
                     // Resume the alarm audio that the interruption silenced.
-                    self.fire(alarm: alarm)
+                    if self.isAlarmAudioPlaying {
+                        AlarmNowPlayingInfo.refresh()
+                    } else {
+                        self.fire(alarm: alarm)
+                    }
                     return
                 }
                 if self.isArmed { self.startSilentLoop() }

@@ -33,6 +33,7 @@
 		001000000000000000000018 /* WakeHardLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001B /* WakeHardLiveActivityWidget.swift */; };
 		001000000000000000000019 /* WakeHardLiveActivityExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 002000000000000000000019 /* WakeHardLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		00100000000000000000001A /* AlarmNowPlayingInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001C /* AlarmNowPlayingInfo.swift */; };
+		00100000000000000000001B /* AlarmKitScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00200000000000000000001D /* AlarmKitScheduler.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,6 +89,7 @@
 		00200000000000000000001A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		00200000000000000000001B /* WakeHardLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeHardLiveActivityWidget.swift; sourceTree = "<group>"; };
 		00200000000000000000001C /* AlarmNowPlayingInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmNowPlayingInfo.swift; sourceTree = "<group>"; };
+		00200000000000000000001D /* AlarmKitScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmKitScheduler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -127,6 +129,7 @@
 				002000000000000000000004 /* AlarmStore.swift */,
 				002000000000000000000016 /* AlarmRuntimeStore.swift */,
 				002000000000000000000005 /* NotificationScheduler.swift */,
+				00200000000000000000001D /* AlarmKitScheduler.swift */,
 				00200000000000000000000F /* BackgroundAlarmEngine.swift */,
 				002000000000000000000006 /* SoundManager.swift */,
 				00200000000000000000001C /* AlarmNowPlayingInfo.swift */,
@@ -277,6 +280,7 @@
 				00100000000000000000001A /* AlarmNowPlayingInfo.swift in Sources */,
 				001000000000000000000012 /* VibrationManager.swift in Sources */,
 				001000000000000000000014 /* AlarmRuntimeStore.swift in Sources */,
+				00100000000000000000001B /* AlarmKitScheduler.swift in Sources */,
 				001000000000000000000015 /* WakeHardLiveActivityAttributes.swift in Sources */,
 				001000000000000000000016 /* WakeHardLiveActivityManager.swift in Sources */,
 				001000000000000000000007 /* AppTheme.swift in Sources */,

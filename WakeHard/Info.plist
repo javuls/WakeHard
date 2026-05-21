@@ -33,6 +33,8 @@
 	<string>public.app-category.utilities</string>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>WakeHard can use locally available songs you choose as alarm audio while the app is armed.</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>WakeHard schedules system-backed alarms so your alarms can still ring reliably if the app is not running.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

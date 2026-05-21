@@ -13,6 +13,8 @@ struct AlarmEditorView: View {
     @State private var showingGentleWakePicker = false
     @State private var showingSnoozePicker = false
     @State private var showingDiscardConfirmation = false
+    @State private var showingRequiredFieldsAlert = false
+    @State private var requiredFieldsMessage = ""
     private let originalAlarm: Alarm
 
     let onSave: (Alarm) -> Void
@@ -41,10 +43,34 @@ struct AlarmEditorView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                         EditorSection(title: "Schedule") {
+                            HStack {
+                                Text(scheduleTitle)
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundStyle(AppTheme.primary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.75)
+
+                                Spacer()
+
+                                Button {
+                                    alarm.weekdays = isDaily ? [] : Set(Weekday.allCases)
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: isDaily ? "checkmark.square.fill" : "square")
+                                            .font(.system(size: 24, weight: .semibold))
+                                            .foregroundStyle(isDaily ? AppTheme.accent : AppTheme.secondary)
+                                        Text("Daily")
+                                            .font(.system(size: 17, weight: .semibold))
+                                            .foregroundStyle(AppTheme.primary)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+
                             WeekdaySelector(selection: $alarm.weekdays)
                         }
 
-                        EditorSection(title: "Sound") {
+                        EditorSection(title: alarm.songTitle == nil ? "Sound" : "Backup Sound") {
                             Picker("Tone", selection: $alarm.sound) {
                                 ForEach(AlarmSound.allCases) { sound in
                                     Text(sound.title).tag(sound)
@@ -92,18 +118,17 @@ struct AlarmEditorView: View {
                                         .lineLimit(1)
                                     Spacer()
                                     Button {
-                                        alarm.songPersistentID = nil
-                                        alarm.songTitle = nil
-                                        alarm.songAssetURLString = nil
-                                        alarm.songDuration = nil
-                                        alarm.playbackStartTime = nil
-                                        alarm.playbackLoopDuration = nil
+                                        removeSelectedSong()
                                     } label: {
                                         Image(systemName: "xmark")
                                     }
                                     .buttonStyle(IconButtonStyle())
                                     .accessibilityLabel("Remove selected song")
                                 }
+
+                                Text("\(alarm.sound.title) will play if the selected song is unavailable.")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(AppTheme.secondary)
                             }
 
                             if alarm.songTitle != nil {
@@ -134,7 +159,7 @@ struct AlarmEditorView: View {
                                     .foregroundStyle(AppTheme.secondary)
                                 Slider(value: $alarm.volume, in: 0.1...1)
                                     .tint(AppTheme.accent)
-                                    .onChange(of: alarm.volume) { _ in
+                                    .onChange(of: alarm.volume) { _, _ in
                                         // Stop the preview as soon as the user
                                         // moves the volume slider so they can
                                         // reset and hear it at the new level.
@@ -219,7 +244,7 @@ struct AlarmEditorView: View {
                         EditorSection(title: "Dismiss") {
                             Picker("Challenge", selection: $alarm.challenge) {
                                 ForEach(WakeChallenge.allCases) { challenge in
-                                    Text(challenge.title).tag(challenge)
+                                    Text(dismissTitle(for: challenge)).tag(challenge)
                                 }
                             }
                             .pickerStyle(.menu)
@@ -256,16 +281,14 @@ struct AlarmEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        onSave(currentDraft)
-                        soundManager.stop()
-                        VibrationManager.shared.stop()
-                        dismiss()
+                        saveAlarm()
                     }
                     .fontWeight(.semibold)
                 }
             }
             .sheet(isPresented: $showingMusicPicker) {
                 MusicPickerView { item in
+                    soundManager.stop()
                     alarm.songPersistentID = item.persistentID
                     alarm.songTitle = item.title ?? "Selected song"
                     alarm.songAssetURLString = item.assetURL?.absoluteString
@@ -285,6 +308,11 @@ struct AlarmEditorView: View {
                 Button("Got it", role: .cancel) {}
             } message: {
                 Text(songNoteMessage)
+            }
+            .alert("Finish alarm setup", isPresented: $showingRequiredFieldsAlert) {
+                Button("Got it", role: .cancel) {}
+            } message: {
+                Text(requiredFieldsMessage)
             }
             .confirmationDialog(
                 "Discard unsaved changes?",
@@ -322,6 +350,19 @@ struct AlarmEditorView: View {
 
     private var isPreviewActive: Bool {
         soundManager.isPreviewPlaying || soundManager.isPreviewPaused
+    }
+
+    private var isDaily: Bool {
+        alarm.weekdays.count == Weekday.allCases.count
+    }
+
+    private var scheduleTitle: String {
+        if isDaily { return "Daily" }
+        if alarm.weekdays.isEmpty { return "One-time" }
+        return Weekday.allCases
+            .filter { alarm.weekdays.contains($0) }
+            .map(\.shortTitle)
+            .joined(separator: ", ")
     }
 
     private var songDurationLimit: Double {
@@ -409,6 +450,28 @@ struct AlarmEditorView: View {
         .contentShape(Rectangle())
     }
 
+    private func dismissTitle(for challenge: WakeChallenge) -> String {
+        challenge == .none ? "Choose" : challenge.title
+    }
+
+    private func saveAlarm() {
+        let draft = currentDraft
+        guard missingRequiredFields(in: draft).isEmpty else {
+            requiredFieldsMessage = "Choose a dismiss style before saving this alarm."
+            showingRequiredFieldsAlert = true
+            return
+        }
+
+        onSave(draft)
+        soundManager.stop()
+        VibrationManager.shared.stop()
+        dismiss()
+    }
+
+    private func missingRequiredFields(in alarm: Alarm) -> [String] {
+        alarm.challenge == .none ? ["Dismiss style"] : []
+    }
+
     private func formatTime(_ value: Double) -> String {
         let seconds = max(0, Int(value.rounded()))
         return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
@@ -426,6 +489,16 @@ struct AlarmEditorView: View {
         soundManager.stop()
         VibrationManager.shared.stop()
         dismiss()
+    }
+
+    private func removeSelectedSong() {
+        soundManager.stop()
+        alarm.songPersistentID = nil
+        alarm.songTitle = nil
+        alarm.songAssetURLString = nil
+        alarm.songDuration = nil
+        alarm.playbackStartTime = nil
+        alarm.playbackLoopDuration = nil
     }
 }
 
@@ -526,6 +599,7 @@ private struct TrimRangeControl: View {
                     .gesture(
                         DragGesture()
                             .onChanged { value in
+                                guard isHorizontalDrag(value) || isStartDragging else { return }
                                 isStartDragging = true
                                 if startDragBase == nil { startDragBase = start }
                                 let delta = duration * value.translation.width / width
@@ -544,6 +618,7 @@ private struct TrimRangeControl: View {
                     .gesture(
                         DragGesture()
                             .onChanged { value in
+                                guard isHorizontalDrag(value) || isEndDragging else { return }
                                 isEndDragging = true
                                 if endDragBase == nil { endDragBase = end }
                                 let delta = duration * value.translation.width / width
@@ -570,6 +645,7 @@ private struct TrimRangeControl: View {
                         DragGesture()
                             .onChanged { value in
                                 guard !isPreviewing else { return }
+                                guard isHorizontalDrag(value) || isPlayheadDragging else { return }
                                 isPlayheadDragging = true
                                 if playheadDragBase == nil { playheadDragBase = playhead }
                                 let delta = duration * value.translation.width / width
@@ -584,9 +660,10 @@ private struct TrimRangeControl: View {
             }
             .contentShape(Rectangle())
             .gesture(
-                DragGesture(minimumDistance: 0)
+                DragGesture(minimumDistance: 14)
                     .onChanged { value in
                         guard !isPreviewing else { return }
+                        guard isHorizontalDrag(value) else { return }
                         playhead = min(end, max(start, timeValue(for: value.location.x - handleWidth / 2, width: width)))
                     }
             )
@@ -661,6 +738,12 @@ private struct TrimRangeControl: View {
     private func timeValue(for x: Double, width: Double) -> Double {
         guard width > 0 else { return 0 }
         return min(duration, max(0, duration * x / width))
+    }
+
+    private func isHorizontalDrag(_ value: DragGesture.Value) -> Bool {
+        let horizontal = abs(value.translation.width)
+        let vertical = abs(value.translation.height)
+        return horizontal > 8 && horizontal > vertical * 1.35
     }
 
     private func markHeight(_ index: Int) -> Double {

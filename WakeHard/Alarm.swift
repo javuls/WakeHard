@@ -19,6 +19,8 @@ struct Alarm: Identifiable, Codable, Equatable {
     var vibrationStrength: Double
     var gentleWakeDuration: GentleWakeDuration
     var isEnabled: Bool
+    var skippedFireDate: Date?
+    var isQuickAlarm: Bool
     var challenge: WakeChallenge
     var snoozeEnabled: Bool
     var snoozeInterval: SnoozeInterval
@@ -43,6 +45,8 @@ struct Alarm: Identifiable, Codable, Equatable {
         vibrationStrength: Double = 0.85,
         gentleWakeDuration: GentleWakeDuration = .off,
         isEnabled: Bool = true,
+        skippedFireDate: Date? = nil,
+        isQuickAlarm: Bool = false,
         challenge: WakeChallenge = .none,
         snoozeEnabled: Bool = false,
         snoozeInterval: SnoozeInterval = .minutes5,
@@ -66,6 +70,8 @@ struct Alarm: Identifiable, Codable, Equatable {
         self.vibrationStrength = vibrationStrength
         self.gentleWakeDuration = gentleWakeDuration
         self.isEnabled = isEnabled
+        self.skippedFireDate = skippedFireDate
+        self.isQuickAlarm = isQuickAlarm
         self.challenge = challenge
         self.snoozeEnabled = snoozeEnabled
         self.snoozeInterval = snoozeInterval
@@ -91,6 +97,8 @@ struct Alarm: Identifiable, Codable, Equatable {
         case vibrationStrength
         case gentleWakeDuration
         case isEnabled
+        case skippedFireDate
+        case isQuickAlarm
         case challenge
         case snoozeEnabled
         case snoozeInterval
@@ -117,6 +125,8 @@ struct Alarm: Identifiable, Codable, Equatable {
         vibrationStrength = try container.decode(Double.self, forKey: .vibrationStrength)
         gentleWakeDuration = try container.decodeIfPresent(GentleWakeDuration.self, forKey: .gentleWakeDuration) ?? .off
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        skippedFireDate = try container.decodeIfPresent(Date.self, forKey: .skippedFireDate)
+        isQuickAlarm = try container.decodeIfPresent(Bool.self, forKey: .isQuickAlarm) ?? false
         challenge = try container.decode(WakeChallenge.self, forKey: .challenge)
         snoozeEnabled = try container.decodeIfPresent(Bool.self, forKey: .snoozeEnabled) ?? false
         snoozeInterval = try container.decodeIfPresent(SnoozeInterval.self, forKey: .snoozeInterval) ?? .minutes5
@@ -128,11 +138,58 @@ struct Alarm: Identifiable, Codable, Equatable {
     }
 
     var nextFireDate: Date? {
+        nextFireDate(after: .now)
+    }
+
+    func nextFireDate(after date: Date) -> Date? {
+        let calendar = Calendar.current
+
+        if weekdays.isEmpty {
+            return nextUnskippedDate({ searchDate in
+                calendar.nextDate(
+                    after: searchDate,
+                    matching: dateComponents,
+                    matchingPolicy: .nextTimePreservingSmallerComponents
+                )
+            }, after: {
+                calendar.date(byAdding: .minute, value: 1, to: skippedFireDate ?? date) ?? date
+            }, from: date)
+        }
+
+        return nextUnskippedDate({ searchDate in
+            weekdays.compactMap { weekday in
+                var components = dateComponents
+                components.weekday = weekday.rawValue
+                return calendar.nextDate(
+                    after: searchDate,
+                    matching: components,
+                    matchingPolicy: .nextTimePreservingSmallerComponents
+                )
+            }
+            .min()
+        }, after: {
+            calendar.date(byAdding: .minute, value: 1, to: skippedFireDate ?? date) ?? date
+        }, from: date)
+    }
+
+    private func nextUnskippedDate(
+        _ candidate: (Date) -> Date?,
+        after skippedStart: () -> Date,
+        from date: Date
+    ) -> Date? {
+        guard let next = candidate(date) else { return nil }
+        guard let skippedFireDate, Calendar.current.isDate(next, equalTo: skippedFireDate, toGranularity: .minute) else {
+            return next
+        }
+        return candidate(skippedStart())
+    }
+
+    func nextScheduledFireDateIgnoringSkip(after date: Date = .now) -> Date? {
         let calendar = Calendar.current
 
         if weekdays.isEmpty {
             return calendar.nextDate(
-                after: .now,
+                after: date,
                 matching: dateComponents,
                 matchingPolicy: .nextTimePreservingSmallerComponents
             )
@@ -142,7 +199,7 @@ struct Alarm: Identifiable, Codable, Equatable {
             var components = dateComponents
             components.weekday = weekday.rawValue
             return calendar.nextDate(
-                after: .now,
+                after: date,
                 matching: components,
                 matchingPolicy: .nextTimePreservingSmallerComponents
             )
@@ -184,6 +241,10 @@ struct Alarm: Identifiable, Codable, Equatable {
     var hasClipLoop: Bool {
         effectivePlaybackLoopDuration > 0
     }
+
+    var hasSelectedSong: Bool {
+        songPersistentID != nil || songAssetURLString != nil || songTitle != nil
+    }
 }
 
 enum Weekday: Int, Codable, CaseIterable, Identifiable {
@@ -206,6 +267,18 @@ enum Weekday: Int, Codable, CaseIterable, Identifiable {
         case .thursday: return "Thu"
         case .friday: return "Fri"
         case .saturday: return "Sat"
+        }
+    }
+
+    var singleLetter: String {
+        switch self {
+        case .sunday: return "S"
+        case .monday: return "M"
+        case .tuesday: return "T"
+        case .wednesday: return "W"
+        case .thursday: return "T"
+        case .friday: return "F"
+        case .saturday: return "S"
         }
     }
 }

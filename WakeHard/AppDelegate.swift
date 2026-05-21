@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
+        center.removeDeliveredNotifications(withIdentifiers: [response.notification.request.identifier])
         ScreenWakeManager.wakeScreenAndShowAlarm()
         let event = AlarmNotificationEvent(userInfo: response.notification.request.content.userInfo)
         NotificationCenter.default.post(name: .alarmNotificationOpened, object: event)

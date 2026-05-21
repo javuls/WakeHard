@@ -17,12 +17,16 @@ enum AlarmNowPlayingInfo {
     private static var observer: NSObjectProtocol?
     private static var currentLabel: String?
     private static var cachedArtwork: MPMediaItemArtwork?
+    private static var generation = UUID()
 
     /// Begin overriding Now Playing for an alarm. Idempotent; safe to call
     /// multiple times in quick succession.
     static func startForAlarm(label: String) {
         currentLabel = label
+        generation = UUID()
+        MPMusicPlayerController.applicationMusicPlayer.beginGeneratingPlaybackNotifications()
         applyInfo()
+        reapplyInfoSoon(generation: generation)
 
         if observer == nil {
             observer = NotificationCenter.default.addObserver(
@@ -34,18 +38,27 @@ enum AlarmNowPlayingInfo {
                     // If the music player swapped in a new item it will have
                     // replaced our Now Playing info — push ours back.
                     AlarmNowPlayingInfo.applyInfo()
+                    AlarmNowPlayingInfo.reapplyInfoSoon(generation: AlarmNowPlayingInfo.generation)
                 }
             }
         }
     }
 
+    static func refresh() {
+        guard currentLabel != nil else { return }
+        applyInfo()
+        reapplyInfoSoon(generation: generation)
+    }
+
     /// Tear down: stop reapplying our info and clear what we set.
     static func stop() {
+        generation = UUID()
         if let observer {
             NotificationCenter.default.removeObserver(observer)
         }
         observer = nil
         currentLabel = nil
+        MPMusicPlayerController.applicationMusicPlayer.endGeneratingPlaybackNotifications()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
@@ -56,6 +69,15 @@ enum AlarmNowPlayingInfo {
             MPMediaItemPropertyArtist: "WakeHard",
             MPMediaItemPropertyArtwork: artwork()
         ]
+    }
+
+    private static func reapplyInfoSoon(generation scheduledGeneration: UUID) {
+        for delay in [0.05, 0.15, 0.35, 0.75, 1.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard generation == scheduledGeneration, currentLabel != nil else { return }
+                applyInfo()
+            }
+        }
     }
 
     private static func artwork() -> MPMediaItemArtwork {

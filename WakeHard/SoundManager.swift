@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFAudio
 import MediaPlayer
 import SwiftUI
 import UIKit
@@ -14,7 +14,7 @@ final class SoundManager: ObservableObject {
     private let volumeView = MPVolumeView(frame: .zero)
     private var loopTimer: Timer?
     private var progressTimer: Timer?
-    private var volumeRampTimer: Timer?
+    private var volumeRampTask: Task<Void, Never>?
     private var pendingMusicStartTask: DispatchWorkItem?
     private var previewResetTask: DispatchWorkItem?
     private var musicStartToken: UUID?
@@ -27,7 +27,7 @@ final class SoundManager: ObservableObject {
     }
 
     init() {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
         attachVolumeViewIfNeeded()
     }
@@ -99,11 +99,11 @@ final class SoundManager: ObservableObject {
             player.numberOfLoops = effectiveLoops && loopDuration <= 0 ? -1 : 0
             player.prepareToPlay()
             player.play()
-            if gentleWakeDuration > 0 {
-                player.setVolume(volume, fadeDuration: gentleWakeDuration)
-            }
             audioPlayer = player
             activePlayback = .audio
+            if gentleWakeDuration > 0 {
+                startAudioPlayerVolumeRamp(to: volume, duration: gentleWakeDuration)
+            }
             isPreviewPlaying = true
             isPreviewPaused = false
             previewPlaybackTime = player.currentTime
@@ -128,8 +128,8 @@ final class SoundManager: ObservableObject {
         pendingMusicStartTask = nil
         previewResetTask?.cancel()
         previewResetTask = nil
-        volumeRampTimer?.invalidate()
-        volumeRampTimer = nil
+        volumeRampTask?.cancel()
+        volumeRampTask = nil
         musicStartToken = nil
         completedMusicStartToken = nil
         switch activePlayback {
@@ -173,8 +173,8 @@ final class SoundManager: ObservableObject {
         loopTimer = nil
         progressTimer?.invalidate()
         progressTimer = nil
-        volumeRampTimer?.invalidate()
-        volumeRampTimer = nil
+        volumeRampTask?.cancel()
+        volumeRampTask = nil
         audioPlayer?.stop()
         audioPlayer = nil
         musicPlayer.stop()
@@ -190,6 +190,12 @@ final class SoundManager: ObservableObject {
         let volume = Float(alarm.volume)
         // Honor gentle-wake ramp for preview as well as the live alarm.
         let gentleWakeDuration = alarm.gentleWakeDuration.duration
+        guard gentleWakeDuration <= 0 else {
+            // MPMusicPlayerController cannot ramp per-player volume reliably.
+            // Fall back to the built-in backup tone so preview matches runtime.
+            return false
+        }
+
         let query = MPMediaQuery.songs()
         let predicate = MPMediaPropertyPredicate(
             value: NSNumber(value: persistentID),
@@ -205,11 +211,7 @@ final class SoundManager: ObservableObject {
         let needsLoopForRamp = gentleWakeDuration > 0
             && naturalSegmentDuration < gentleWakeDuration + 1
         let effectiveLoops = loops || needsLoopForRamp
-        if gentleWakeDuration > 0 {
-            startSystemVolumeRamp(to: volume, duration: gentleWakeDuration)
-        } else {
-            setSystemVolume(volume)
-        }
+        setSystemVolume(volume)
         musicPlayer.setQueue(with: MPMediaItemCollection(items: [item]))
         musicPlayer.repeatMode = effectiveLoops && !alarm.hasClipLoop ? .one : .none
         activePlayback = .music
@@ -359,28 +361,35 @@ final class SoundManager: ObservableObject {
         }
     }
 
-    private func startSystemVolumeRamp(to targetVolume: Float, duration: TimeInterval) {
-        volumeRampTimer?.invalidate()
-        volumeRampTimer = nil
+    private func startAudioPlayerVolumeRamp(to targetVolume: Float, duration: TimeInterval) {
+        volumeRampTask?.cancel()
+        volumeRampTask = nil
+
+        guard let player = audioPlayer else { return }
+
         guard duration > 0 else {
-            setSystemVolume(targetVolume)
+            player.volume = targetVolume
             return
         }
 
-        setSystemVolume(0)
+        player.volume = 0
         let startedAt = Date()
-        volumeRampTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] timer in
-            Task { @MainActor in
-                guard let self else {
-                    timer.invalidate()
-                    return
-                }
+        volumeRampTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            while !Task.isCancelled {
+                guard self.activePlayback == .audio else { return }
+
                 let progress = min(1, Date().timeIntervalSince(startedAt) / duration)
-                self.setSystemVolume(targetVolume * Float(progress))
-                if progress >= 1 {
-                    timer.invalidate()
-                    self.volumeRampTimer = nil
-                }
+                self.audioPlayer?.volume = targetVolume * Float(progress)
+
+                guard progress < 1 else { break }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+
+            if !Task.isCancelled {
+                self.audioPlayer?.volume = targetVolume
+                self.volumeRampTask = nil
             }
         }
     }
